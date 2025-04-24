@@ -1,0 +1,168 @@
+---
+title: "STAT 427 Final Project Code"
+author: "Leigh Cummings"
+date: "2025-04-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1.  Data Preprocessing
+```{r}
+library(tidyverse)
+library(lubridate)
+library(MASS)
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data <- read_csv(url)
+
+
+mta_data <- mta_data %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
+mta_data <- mta_data %>%
+  select(Date, Subway_Ridership = `Subways: Total Estimated Ridership`) %>%
+  drop_na()
+
+mta_data <- mta_data %>%
+  mutate(
+    DayOfWeek = wday(Date, label = TRUE),
+    Month = month(Date),
+    Year = year(Date),
+    Day = day(Date)
+  )
+
+```
+
+2.  Polynomial Regression
+```{r}
+mta_data <- mta_data %>%
+  mutate(
+    Day_Num = as.numeric(Date - min(Date)),
+    Day_Num2 = Day_Num^2,
+    Day_Num3 = Day_Num^3
+  )
+
+#Polynomial Regression Model
+poly_model <- lm(Subway_Ridership ~ Day_Num + Day_Num2 + Day_Num3, data = mta_data)
+
+summary(poly_model)
+
+#MSE
+mta_data <- mta_data %>%
+  mutate(Predicted_Ridership = predict(poly_model, newdata = mta_data))
+
+mse <- mean((mta_data$Subway_Ridership - mta_data$Predicted_Ridership)^2)
+print(paste("Mean Squared Error:", round(mse, 2)))
+
+# Plot
+ggplot(mta_data, aes(x = Date)) +
+  geom_line(aes(y = Subway_Ridership), color = "blue", size = 1) +
+  geom_line(aes(y = Predicted_Ridership), color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted Subway Ridership",
+       y = "Ridership",
+       x = "Date") +
+  theme_minimal()
+
+```
+
+3.  Quadratic Discriminant Analysis (QDA)
+
+```{r}
+quantiles <- quantile(mta_data$Subway_Ridership, probs = c(0.33, 0.66))
+mta_data <- mta_data %>%
+  mutate(Ridership_Level = case_when(
+    Subway_Ridership <= quantiles[1] ~ "Low",
+    Subway_Ridership <= quantiles[2] ~ "Average",
+    TRUE ~ "High"
+  ))
+
+qda_data <- mta_data %>%
+  select(Day_Num, Day_Num2, Day_Num3, Ridership_Level)
+
+#QDA Model
+qda_model <- qda(Ridership_Level ~ Day_Num + Day_Num2 + Day_Num3, data = qda_data)
+
+#Accuracy
+qda_predictions <- predict(qda_model, qda_data)$class
+accuracy <- mean(qda_predictions == qda_data$Ridership_Level)
+print(paste("QDA Accuracy:", round(accuracy * 100, 2), "%"))
+
+# Confusion Matrix
+table(Predicted = qda_predictions, Actual = qda_data$Ridership_Level)
+
+```
+
+4.  K-Fold Cross-Validation
+
+```{r}
+set.seed(123)
+k <- 5
+folds <- sample(rep(1:k, length.out = nrow(mta_data)))
+
+mse_values <- c()
+accuracy_values <- c()
+
+#Split Data
+for(i in 1:k){
+  train_data <- mta_data[folds != i, ]
+  test_data <- mta_data[folds == i, ]
+  
+#Polynomial Regression
+  poly_model_cv <- lm(Subway_Ridership ~ Day_Num + Day_Num2 + Day_Num3, data = train_data)
+  predictions <- predict(poly_model_cv, newdata = test_data)
+  mse_fold <- mean((test_data$Subway_Ridership - predictions)^2)
+  mse_values <- c(mse_values, mse_fold)
+  
+#QDA
+  qda_model_cv <- qda(Ridership_Level ~ Day_Num + Day_Num2 + Day_Num3, data = train_data)
+  qda_pred <- predict(qda_model_cv, test_data)$class
+  acc_fold <- mean(qda_pred == test_data$Ridership_Level)
+  accuracy_values <- c(accuracy_values, acc_fold)
+}
+
+# Average MSE and Accuracy
+avg_mse <- mean(mse_values)
+avg_accuracy <- mean(accuracy_values)
+
+print(paste("Average MSE from Cross-Validation:", round(avg_mse, 2)))
+print(paste("Average Accuracy from Cross-Validation:", round(avg_accuracy * 100, 2), "%"))
+
+```
+
+
+ADDITIONAL GRAPHICS
+
+
+1)  Daily Ridership Classification ("Low", "Average", "High")
+
+```{r}
+ggplot(mta_data, aes(x = Date, y = Subway_Ridership, color = Ridership_Level)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Low" = "blue", "Average" = "orange", "High" = "green")) +
+  labs(
+    title = "Daily Subway Ridership Classified by Level",
+    y = "Estimated Ridership",
+    x = "Date",
+    color = "Ridership Level"
+  ) +
+  theme_minimal()
+```
+
+2)  QDA Decision Boundaries
+```{r}
+library(ggplot2)
+
+ggplot(mta_data, aes(x = Day_Num, y = Day_Num2, color = Ridership_Level)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Low" = "blue", "Average" = "orange", "High" = "green")) +
+  labs(
+    title = "QDA Classification Boundary Approximation",
+    x = "Day Number",
+    y = "Day Number Squared",
+    color = "Ridership Level"
+  ) +
+  theme_minimal()
+```
