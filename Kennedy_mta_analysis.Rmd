@@ -1,0 +1,296 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(splines)
+library(glmnet)
+library(readr)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+
+df <- read_csv("MTA_Daily_Ridership_Data.csv")
+glimpse(df)
+
+options(scipen = 999)
+
+```
+```{r}
+colnames(df)
+```
+
+```{r}
+response_var <- "Subways: Total Estimated Ridership"
+predictor_vars <- c("Buses: Total Estimated Ridership", 
+                    "LIRR: Total Estimated Ridership", 
+                    "Metro-North: Total Estimated Ridership",
+                    "Access-A-Ride: Total Scheduled Trips", 
+                    "Bridges and Tunnels: Total Traffic", 
+                    "Staten Island Railway: Total Estimated Ridership")
+
+df_clean <- na.omit(df[, c(response_var, predictor_vars)])
+
+# Response and Predictor Matrices 
+x <- as.matrix(df_clean[, predictor_vars])
+y <- df_clean[[response_var]]
+
+# Training and testing sets
+set.seed(168)
+train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
+x_train <- x[train_indices, ]
+y_train <- y[train_indices]
+x_test <- x[-train_indices, ]
+y_test <- y[-train_indices]
+
+# Ridge Regression (alpha = 0)
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
+ridge_mse <- mean((ridge_pred - y_test)^2)
+
+# Lasso Regression (alpha = 1)
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
+lasso_mse <- mean((lasso_pred - y_test)^2)
+
+
+cat("Ridge MSE:", ridge_mse, "\n")
+cat("Lasso MSE:", lasso_mse, "\n")
+
+```
+```{r}
+# Lasso appears to be the better model in this case, as it provides more accurate predictions with potentially fewer, more relevant variables.
+# 
+# Valuable for decision-makers in the MTA, as it could help them focus on the most important factors influencing subway ridership post-pandemic, leading to better planning and more targeted policy decisions.
+```
+
+
+```{r}
+# Plot Cross-Validation Curves (MSE vs Lambda)
+
+par(mfrow = c(1, 2))  # Side-by-side plots
+
+# Ridge
+plot(ridge_model)
+title("Ridge: CV MSE vs Lambda")
+
+# Lasso
+plot(lasso_model)
+title("Lasso: CV MSE vs Lambda")
+
+```
+
+```{r}
+# Actual vs. Predicted Values Plot
+
+# Convert predictions to numeric
+ridge_pred_num <- as.numeric(ridge_pred)
+lasso_pred_num <- as.numeric(lasso_pred)
+
+# Plot
+par(mfrow = c(1, 2))
+
+plot(y_test, ridge_pred_num,
+     main = "Ridge: Actual vs Predicted",
+     xlab = "Actual",
+     ylab = "Predicted",
+     pch = 19, col = "dodgerblue")
+abline(0, 1, col = "red", lwd = 2)
+
+plot(y_test, lasso_pred_num,
+     main = "Lasso: Actual vs Predicted",
+     xlab = "Actual",
+     ylab = "Predicted",
+     pch = 19, col = "darkorange")
+abline(0, 1, col = "red", lwd = 2)
+
+```
+```{r}
+# Coefficient Paths 
+par(mfrow = c(1, 2))
+
+# Ridge Coefficients
+plot(glmnet(x_train, y_train, alpha = 0), xvar = "lambda", label = TRUE)
+title("Ridge Coefficient Paths")
+
+# Lasso Coefficients
+plot(glmnet(x_train, y_train, alpha = 1), xvar = "lambda", label = TRUE)
+title("Lasso Coefficient Paths")
+
+```
+# Classification: Decision Trees & Random Forest 
+```{r}
+# Making a categorical target variable
+quantiles <- quantile(df_clean[["Subways: Total Estimated Ridership"]], probs = c(0.33, 0.66))
+df_clean$ridership_class <- cut(df_clean[["Subways: Total Estimated Ridership"]],
+                                breaks = c(-Inf, quantiles, Inf),
+                                labels = c("Low", "Medium", "High"),
+                                right = TRUE)
+
+# Class distribution
+table(df_clean$ridership_class)
+```
+```{r}
+# Training and Splitting Data
+set.seed(168)
+
+# Create index for train/test split
+train_index <- createDataPartition(df_clean$ridership_class, p = 0.8, list = FALSE)
+
+train_data <- df_clean[train_index, ]
+test_data  <- df_clean[-train_index, ]
+```
+```{r}
+# Rename columns to easier format (only for modeling use)
+train_data_clean <- train_data %>%
+  rename_with(~ gsub("[^[:alnum:]_]", "_", .))  # Replace colons/spaces with underscores
+
+test_data_clean <- test_data %>%
+  rename_with(~ gsub("[^[:alnum:]_]", "_", .))
+```
+
+```{r}
+# Training the Decision Tree
+
+
+tree_model <- rpart(ridership_class ~ Buses__Total_Estimated_Ridership +
+                                    LIRR__Total_Estimated_Ridership +
+                                    Metro_North__Total_Estimated_Ridership +
+                                    Access_A_Ride__Total_Scheduled_Trips +
+                                    Bridges_and_Tunnels__Total_Traffic +
+                                    Staten_Island_Railway__Total_Estimated_Ridership,
+                    data = train_data_clean,
+                    method = "class")
+
+rpart.plot(tree_model, type = 2, extra = 104, fallen.leaves = TRUE)
+
+```
+
+
+
+
+```{r}
+# Training Random Forest
+
+rf_model <- randomForest(ridership_class ~ Buses__Total_Estimated_Ridership +
+                                          LIRR__Total_Estimated_Ridership +
+                                          Metro_North__Total_Estimated_Ridership +
+                                          Access_A_Ride__Total_Scheduled_Trips +
+                                          Bridges_and_Tunnels__Total_Traffic +
+                                          Staten_Island_Railway__Total_Estimated_Ridership,
+                         data = train_data_clean,
+                         ntree = 500,
+                         importance = TRUE)
+
+print(rf_model)
+
+
+```
+
+```{r}
+# Evaluating Performance Based on Predictions
+
+tree_pred <- predict(tree_model, test_data_clean, type = "class")
+rf_pred   <- predict(rf_model, test_data_clean)
+
+# Confusion matrices
+
+cat("Decision Tree Confusion Matrix:\n")
+print(confusionMatrix(tree_pred, test_data_clean$ridership_class))
+
+cat("\nRandom Forest Confusion Matrix:\n")
+print(confusionMatrix(rf_pred, test_data_clean$ridership_class))
+
+
+
+```
+
+```{r}
+# Variable importance
+importance(rf_model)
+```
+```{r}
+# Accuracy Scores
+tree_accuracy <- sum(tree_pred == test_data_clean$ridership_class) / length(tree_pred)
+rf_accuracy <- sum(rf_pred == test_data_clean$ridership_class) / length(rf_pred)
+
+cat(sprintf("Decision Tree Accuracy: %.2f%%\n", tree_accuracy * 100))
+cat(sprintf("Random Forest Accuracy: %.2f%%\n", rf_accuracy * 100))
+
+```
+# Cross-Validation & Model Evaluation: K-Fold CV for Ridge/Lasso & Decision Trees + Model Accuracy Metrics for Decision Trees 
+
+```{r}
+# Ridge/Lasso: K-Fold Cross-Validation
+# AGAIN
+
+
+
+# K-Fold cross-validation for Ridge/Lasso models
+set.seed(168)
+cv_ridge <- cv.glmnet(x_train, y_train, alpha = 0)  
+cv_lasso <- cv.glmnet(x_train, y_train, alpha = 1) 
+
+# Cross-validation results
+plot(cv_ridge)  
+plot(cv_lasso) 
+
+# Best lambda (penalty) for Ridge and Lasso
+ridge_lambda_best <- cv_ridge$lambda.min
+lasso_lambda_best <- cv_lasso$lambda.min
+
+cat("Best Ridge lambda:", ridge_lambda_best, "\n")
+cat("Best Lasso lambda:", lasso_lambda_best, "\n")
+
+# Predict using the best lambda
+ridge_pred_cv <- predict(cv_ridge, s = ridge_lambda_best, newx = x_test)
+lasso_pred_cv <- predict(cv_lasso, s = lasso_lambda_best, newx = x_test)
+
+# MSE for Ridge and Lasso models
+ridge_mse_cv <- mean((ridge_pred_cv - y_test)^2)
+lasso_mse_cv <- mean((lasso_pred_cv - y_test)^2)
+
+cat("Ridge MSE (CV):", ridge_mse_cv, "\n")
+cat("Lasso MSE (CV):", lasso_mse_cv, "\n")
+
+```
+```{r}
+# Cross-Validation for Decision Trees
+
+# Defining the training control for K-Fold CV
+train_control <- trainControl(method = "cv", number = 10)  # 10-fold CV
+
+# Train the decision tree model with K-fold CV
+tree_cv_model <- train(ridership_class ~ `Buses__Total_Estimated_Ridership` + 
+                       `LIRR__Total_Estimated_Ridership` + 
+                       `Metro_North__Total_Estimated_Ridership` + 
+                       `Access_A_Ride__Total_Scheduled_Trips` + 
+                       `Bridges_and_Tunnels__Total_Traffic` + 
+                       `Staten_Island_Railway__Total_Estimated_Ridership`,
+                       data = train_data_clean, 
+                       method = "rpart", 
+                       trControl = train_control)
+
+# Summary results
+print(tree_cv_model)
+
+
+```
+```{r}
+# Model Accuracy Metrics for Decision Trees
+
+# Predictions on the test set
+tree_pred_cv <- predict(tree_cv_model, test_data_clean)
+
+# Confusion matrix and accuracy metrics for Decision Tree
+conf_matrix <- confusionMatrix(tree_pred_cv, test_data_clean$ridership_class)
+
+# Confusion matrix and metrics
+print(conf_matrix)
+
+```
+
