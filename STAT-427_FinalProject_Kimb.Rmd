@@ -11,10 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r pressure, echo=FALSE, message=FALSE}
 library(tidyverse)
-library(readr)
 library(lubridate)
-library(dplyr)
 library(dbplyr)
+library(readr)
 library(RSQLite)
 library(ggthemes)
 library(ggplot2)
@@ -26,6 +25,10 @@ library(MASS)
 library(boot)
 library(tree)
 library(randomForest)
+library(splines)
+library(rpart)
+library(rpart.plot)
+library(car)
 ```
 
 ```{r}
@@ -68,116 +71,78 @@ head(df)
 colnames(df)
 ```
 
+# Histograms
 ```{r}
-hist(df$`Subways: Total Estimated Ridership`, main = "Total Estimated Subway Ridership")
+df_long <- df %>%
+   dplyr::select(`Subways: Total Estimated Ridership`,
+         `Buses: Total Estimated Ridership`,
+         `LIRR: Total Estimated Ridership`,
+         `Metro-North: Total Estimated Ridership`,
+         `Staten Island Railway: Total Estimated Ridership`) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Transportation_Mode",
+               values_to = "Ridership")
+
+ggplot(df_long, aes(x = Ridership)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Transportation_Mode, scales = "free_x") +
+  labs(title = "Distribution of Ridership by Transportation Mode",
+       x = "Total Estimated Ridership",
+       y = "Frequency") +
+  theme_minimal()
 ```
 
+# Plotted Relationships
 ```{r}
-hist(df$`Buses: Total Estimated Ridership`, main = "Total Estimated Buses Ridership")
-```
 
-```{r}
-hist(df$`LIRR: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership")
-```
+df_long <- df %>%
+   dplyr::select(
+    `Subways: % of Comparable Pre-Pandemic Day`,
+    `Buses: Total Estimated Ridership`,
+    `LIRR: Total Estimated Ridership`,
+    `Metro-North: Total Estimated Ridership`,
+    `Access-A-Ride: Total Scheduled Trips`,
+    `Bridges and Tunnels: Total Traffic`,
+    `Staten Island Railway: Total Estimated Ridership`,
+    `Subways: Total Estimated Ridership`
+  ) %>%
+  pivot_longer(
+    cols = -`Subways: Total Estimated Ridership`,
+    names_to = "Other_Metric",
+    values_to = "Other_Value"
+  )
 
-
-```{r}
-hist(df$`Metro-North: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership")
-```
-
-
-```{r}
-hist(df$`Staten Island Railway: Total Estimated Ridership`, main = "SIR Total Estimated Ridership")
-```
-
-
-```{r}
-plot(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`, main = "Subway % of Comparable Pre-Pandemic Day v Subway Total Estimated Ridership", xlab = "Subway % of Comparable Pre-Pandemic Day", ylab = "Subway Total Estimated Ridership")
-```
-
-
-```{r}
-plot(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Buses Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Buses Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
-```
-
-
-```{r}
-plot(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "LIRR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
-```
-
-
-```{r}
-plot(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Metro-North Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
-```
-
-
-```{r}
-plot(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`, main = "Access-A-Ride Total Scheduled Trips v Subway Total Estimated Ridership", xlab = "Access-A-Ride Total Scheduled Trips", ylab = "Subway Total Estimated Ridership")
-```
-
-```{r}
-plot(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`, main = "Bridges and Tunnels Total Traffic v Subway Total Estimated Ridership", xlab = "Bridges and Tunnels Total Traffic", ylab = "Subway Total Estimated Ridership")
-```
-
-```{r}
-plot(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "SIR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "SIR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
+ggplot(df_long, aes(x = Other_Value, y = `Subways: Total Estimated Ridership`)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ Other_Metric, scales = "free", ncol = 2) + # Removed the extra + before the comment
+  labs(
+    title = "Subway Ridership vs. Other Transportation Metrics",
+    x = "Other Transportation Metric",
+    y = "Subway Total Estimated Ridership"
+  ) +
+  theme_minimal()
 ```
 
 
-```{r}
-cor(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
 
-```{r}
-cor(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
 
+# Corrolations
 ```{r}
-cor(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
-```
+numeric_cols <- names(df)[sapply(df, is.numeric) & names(df) != "Subways: Total Estimated Ridership"]
 
-```{r}
-cor(df$`Buses: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
+correlation_results <- df %>%
+  dplyr::select(-Date) %>% # Ensure Date is removed
+  pivot_longer(
+    cols = all_of(numeric_cols),
+    names_to = "Other_Metric",
+    values_to = "Other_Value"
+  ) %>%
+  group_by(Other_Metric) %>%
+  summarize(
+    correlation = cor(`Subways: Total Estimated Ridership`, Other_Value, use = "pairwise.complete.obs")
+  )
 
-```{r}
-cor(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`LIRR: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Metro-North: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Access-A-Ride: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
-```
-
-```{r}
-cor(df$`Staten Island Railway: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+print(correlation_results)
 ```
 
 # Regression Question
@@ -216,7 +181,6 @@ anova(full_model, reduced_model)
 ```
 
 ```{r}
-library(car)
 vif_full <- vif(full_model)
 vif_full
 ```
@@ -245,7 +209,6 @@ rmse_reduced
 
 ```{r}
 set.seed(1234)
-library(boot)
 
 cv_error_full <- cv.glm(df, full_model, K = 10)
 cv_error_full$delta[1]  
@@ -254,7 +217,6 @@ sqrt(cv_error_full$delta[1])
 
 ```{r}
 set.seed(1234)
-library(boot)
 
 cv_error_reduced <- cv.glm(df, reduced_model, K = 10)
 cv_error_reduced$delta[1]  
@@ -311,6 +273,9 @@ df_knn <- na.omit(df[, c(predictors, "total_ridership_level")])
 
 ```
 
+# Because KNN is distance-based it could be good to standardize predictors by scaling them, such as
+# df_knn_scaled <- df_knn %>%
+#  mutate(across(all_of(predictors), scale))
 
 
 ```{r}
@@ -357,6 +322,12 @@ for(k in 1:100){
 ```{r}
 best_k <- which.max(class_rates)
 best_k
+```
+
+```{r}
+"I think there could be some potential overfitting of the training data implied by best_k = 1. The model might be learning the noise and specific details of the training set rather than the underlying generalizable patterns and i think this will probably lead to poor performance on new, unseen data. A k=1 model is highly sensitive to outliers
+
+Even if the cross-validation accuracy was high with k=1, it's still susceptible to overfitting, especially if the dataset has noise or outliers. I have done previous projects with KNN before where I get low k values and high accuracy, when those two combine whether or not the model is acceptable will depend on the project's context."
 ```
 
 ```{r}
