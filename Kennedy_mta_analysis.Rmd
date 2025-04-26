@@ -29,7 +29,7 @@ colnames(df)
 
 ```
 
-Preparing Data: Regression Section
+## Preparing Data: Regression Section
 ```{r}
 response_var <- "Subways: Total Estimated Ridership"
 predictor_vars <- c("Buses: Total Estimated Ridership", 
@@ -54,7 +54,7 @@ x_test  <- x[-train_indices, ]
 y_test  <- y[-train_indices]
 
 ```
-Ridge and Lasso Regression
+## Ridge and Lasso Regression
 ```{r}
 # Ridge
 ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
@@ -71,7 +71,7 @@ cat("Lasso MSE:", lasso_mse, "\n")
 
 ```
 
-Ridge vs Lasso: Predicted vs Actual Plot
+## Ridge vs Lasso: Predicted vs Actual Plot
 ```{r}
 # Plotting
 ridge_plot_df <- data.frame(Actual = y_test, Predicted = as.numeric(ridge_pred), Model = "Ridge")
@@ -91,10 +91,15 @@ ggplot(all_predictions_df, aes(x = Actual, y = Predicted, color = Model)) +
 
 ```
 
-Ridge/Lasso CV Plots
 ```{r}
-library(ggplot2)
+# This predicted vs actual subway ridership plot indicates that our Ridge and Lasso regression models are performing reasonably well in predicting subway ridership based on the other transportation metrics.
 
+# Comparing our MSE, we can see that the Lasso regression model has a slightly lower Mean Squared Error than the Ridge regression model on your test data. A lower MSE indicates that, on average, the predictions made by the Lasso model are closer to the actual subway ridership values in the test set compared to the Ridge model. The difference in MSE, while present, might not be drastically large. It suggests that Lasso has a marginal improvement in predictive accuracy for this specific dataset and the chosen model parameters.
+```
+
+
+## Ridge/Lasso CV Plots
+```{r}
 # Create data frames for ridge and lasso
 ridge_df <- data.frame(
   log_lambda = log(ridge_model$lambda),
@@ -138,10 +143,19 @@ grid.arrange(ridge_plot, lasso_plot, ncol = 2)
 
 ```
 
-Classification: Decision Tree and Random Forest
+```{r}
+"Ridge: 'Hockey stick' MSE curve vs. log(λ), low MSE at low λ (overfitting), increases with regularization (underfitting), plateaus at high λ. Optimal λ suggests moderate regularization prevents overfitting. Small error bars indicate consistent CV performance. Minimum MSE in lower tens of billions.
+
+Lasso: MSE increases with log(λ) from minimum, potentially steeper than Ridge. Optimal λ lower, suggesting less regularization needed. Small error bars. Minimum MSE in lower tens of billions, possibly slightly better than Ridge.
+
+Comparison: Similar minimum MSE for both (billions indicate substantial unexplained variance). Lasso prefers less regularization, implying potential feature selection of less influential predictors, offering insight into key factors. Both handle multicollinearity. Lasso's slight edge hints at removing less relevant variables."
+```
+
+
+## Classification: Decision Tree and Random Forest
 
 ```{r}
-# Create categorical target variable
+# Creating categorical target variable
 quantiles <- quantile(df_clean[[response_var]], probs = c(0.33, 0.66))
 df_clean$ridership_class <- cut(df_clean[[response_var]],
                                 breaks = c(-Inf, quantiles, Inf),
@@ -171,7 +185,7 @@ test_data_clean <- test_data %>%
 
 ```
 
-Training Decision Tree
+## Training Decision Tree
 ```{r}
 tree_model <- rpart(ridership_class ~ Buses__Total_Estimated_Ridership +
                                     LIRR__Total_Estimated_Ridership +
@@ -196,9 +210,12 @@ rpart.plot(pruned_tree, type = 2, extra = 104, fallen.leaves = TRUE)
 ```
 
 
+```{r}
+"The decision tree classifies daily subway ridership (low, average, high) using other MTA services' ridership. LIRR, Metro-North, Access-A-Ride, and Staten Island Railway ridership were key predictors, suggesting interconnected demand. Surprisingly, bus ridership and bridge/tunnel traffic were not significant in this model. The initial guessing error was high (66%), highlighting the model's value. By pruning the tree using cross-validation error, we aim for a model that accurately classifies future subway ridership based on these relationships. The tree's rules offer insights into how demand across different transit modes interacts, which can inform future, integrated transportation policies and service planning."
+```
 
 
-Train Random Forest
+## Train Random Forest
 ```{r}
 rf_model <- randomForest(ridership_class ~ Buses__Total_Estimated_Ridership +
                                           LIRR__Total_Estimated_Ridership +
@@ -214,7 +231,7 @@ print(rf_model)
 
 ```
 
-Evaluating Tree and RF
+## Evaluating Tree and RF
 ```{r}
 tree_pred <- predict(tree_model, test_data_clean, type = "class")
 rf_pred   <- predict(rf_model, test_data_clean)
@@ -227,7 +244,25 @@ cat("\nRandom Forest Confusion Matrix:\n")
 print(confusionMatrix(rf_pred, test_data_clean$ridership_class))
 
 ```
-Variable Importance (Random Forest)
+
+
+```{r}
+"Overall Accuracy: Random Forest achieves a higher accuracy (93.22%) compared to the Decision Tree (89.27%), indicating a greater ability to correctly classify ridership levels.
+
+Kappa Statistic: Random Forest has a substantially higher Kappa (0.8983 vs. 0.839), suggesting better agreement between predicted and actual classifications beyond chance.
+
+Sensitivity (Recall): While the sensitivity for the 'Low' class is similar for both, Random Forest shows higher sensitivity for 'Medium' (91.45% vs. 85.47%) and 'High' (93.33% vs. 87.50%) ridership, meaning it's better at correctly identifying these categories.
+
+Specificity: Random Forest exhibits higher specificity across all classes, particularly for 'Low' (98.73% vs. 95.36%) and 'Medium' (94.09% vs. 91.14%), indicating a better ability to correctly identify days that do not belong to each ridership level.
+
+Positive Predictive Value (Precision): Random Forest has a higher precision for 'Low' (97.37% vs. 90.98%) and 'Medium' (88.43% vs. 82.64%) ridership, meaning when it predicts these levels, it is more likely to be correct. The precision for 'High' is comparable.
+
+Balanced Accuracy: Random Forest demonstrates higher balanced accuracy across all classes, especially for 'Medium' (92.77% vs. 88.30%) and 'High' (95.17% vs. 92.47%), indicating better performance when class imbalance is considered."
+```
+
+
+
+## Variable Importance (Random Forest)
 ```{r}
 importance(rf_model)
 
@@ -246,7 +281,7 @@ ggplot(rf_importance_df, aes(x = reorder(Feature, Importance), y = Importance)) 
 ```
 
 
-Accuracy
+## Accuracy
 ```{r}
 tree_accuracy <- sum(tree_pred == test_data_clean$ridership_class) / length(tree_pred)
 rf_accuracy <- sum(rf_pred == test_data_clean$ridership_class) / length(rf_pred)
@@ -256,7 +291,7 @@ cat(sprintf("Random Forest Accuracy: %.2f%%\n", rf_accuracy * 100))
 
 ```
 
-Cross-Validation: K-Fold CV for Decision Trees
+## Cross-Validation: K-Fold CV for Decision Trees
 ```{r}
 set.seed(168)
 train_control <- trainControl(method = "cv", number = 10)
@@ -282,6 +317,31 @@ tree_pred_cv <- predict(tree_cv_model, test_data_clean)
 cat("Decision Tree (CV) Confusion Matrix:\n")
 print(confusionMatrix(tree_pred_cv, test_data_clean$ridership_class))
 
+```
+```{r}
+"Accuracy: Random Forest (93.22%) still significantly outperforms the cross-validated Decision Tree (87.57%).
+
+Kappa: Random Forest (0.8983) shows substantially better agreement than the cross-validated Decision Tree (0.8136).
+
+Sensitivity: Random Forest generally maintains higher or comparable sensitivity across the classes, 'particularly for 'Medium' and 'High' ridership.
+
+Specificity: Random Forest consistently shows higher specificity, indicating a better ability to correctly identify days not belonging to each class.
+
+Balanced Accuracy: Random Forest exhibits higher balanced accuracy across all classes, suggesting more robust performance when considering potential class imbalance."
+```
+
+
+
+```{r}
+" Over all, The strong performance of the Random Forest model highlights just how many different factors influence subway ridership. Both models show that commuter rail services like the LIRR and Metro-North play a major role, even though each model weighs their importance a little differently. This points to a strong connection between regional commuting patterns and how people use the subway.
+
+Access-A-Ride also showed up as a key factor, suggesting that paratransit demand might be linked to specific levels of subway ridership, maybe reflecting the needs of certain groups of riders who rely more heavily on these services.
+
+On the other hand, bus ridership and bridge/tunnel traffic were less important in the Random Forest model, and they didn’t even appear in the decision tree structure. This suggests that while buses and car traffic might affect transit patterns in general, they’re not the strongest indicators when it comes to classifying daily subway ridership as 'low,' 'average,' or 'high.' That said, they could still be valuable for predicting the actual number of riders (as we saw in the regression models) or for understanding more localized transit behaviors.
+
+The Random Forest's high accuracy rate (93.22%) gives us a lot of confidence in its ability to predict daily ridership categories moving forward. This could be incredibly useful for the MTA when it comes to planning ahead, such as adjusting train schedules, staffing, and resource allocation based on expected rider volumes. For example, if we can predict a 'high' ridership day ahead of time based on trends in commuter rail or paratransit usage, the MTA could proactively add service and better manage crowding.
+
+Finally, the insights from the feature importance analysis can help guide bigger policy decisions. Knowing which modes of transit have the strongest ties to subway ridership could support more integrated planning and investment strategies across the system. For instance, encouraging commuter rail use might have predictable ripple effects on subway demand.
 ```
 
 
