@@ -1,0 +1,429 @@
+---
+title: "STAT-427_FinalProject_Kimb"
+author: "J.Kimbrough"
+date: "2025-04-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r pressure, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(dplyr)
+library(dbplyr)
+library(RSQLite)
+library(ggthemes)
+library(ggplot2)
+library(class)
+library(caret)
+library(glmnet)
+library(ISLR2)
+library(MASS)
+library(boot)
+library(tree)
+library(randomForest)
+```
+
+```{r}
+directory_path <- "C:/Users/jkimb/OneDrive/Desktop/School/Classes/VII. Spring 2025 (LAST SEM BABY)/ONL_STAT-427_StatisticalMachineLearning/Projects"
+
+setwd(directory_path)
+```
+
+```{r}
+mta_data_raw <- read_csv("./data/MTA_Daily_Ridership_Data__2020_-_2025.csv", na = "missing")
+
+view(mta_data_raw)
+glimpse(mta_data_raw)
+```
+
+
+# ---- Cleaning Data -----
+
+```{r}
+anyNA(mta_data_raw)
+any(sapply(mta_data_raw, function(x) any(x=="")))
+any(sapply(mta_data_raw, function(x) any(x == -999)))
+```
+
+```{r}
+df <- mta_data_raw %>%
+  mutate(Date = mdy(Date)) %>%
+  mutate(across(where(is.character), ~ na_if(., "missing"))) %>%
+  mutate(across(where(is.numeric), ~ na_if(., -999))) %>%
+  mutate(across(where(is.character), ~ na_if(., ""))) %>% 
+  na.omit()
+
+head(df)
+```
+
+
+# --- Exploratory Data Analysis ---
+
+```{r}
+colnames(df)
+```
+
+```{r}
+hist(df$`Subways: Total Estimated Ridership`, main = "Total Estimated Subway Ridership")
+```
+
+```{r}
+hist(df$`Buses: Total Estimated Ridership`, main = "Total Estimated Buses Ridership")
+```
+
+```{r}
+hist(df$`LIRR: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership")
+```
+
+
+```{r}
+hist(df$`Metro-North: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership")
+```
+
+
+```{r}
+hist(df$`Staten Island Railway: Total Estimated Ridership`, main = "SIR Total Estimated Ridership")
+```
+
+
+```{r}
+plot(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`, main = "Subway % of Comparable Pre-Pandemic Day v Subway Total Estimated Ridership", xlab = "Subway % of Comparable Pre-Pandemic Day", ylab = "Subway Total Estimated Ridership")
+```
+
+
+```{r}
+plot(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Buses Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Buses Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
+```
+
+
+```{r}
+plot(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "LIRR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
+```
+
+
+```{r}
+plot(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Metro-North Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
+```
+
+
+```{r}
+plot(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`, main = "Access-A-Ride Total Scheduled Trips v Subway Total Estimated Ridership", xlab = "Access-A-Ride Total Scheduled Trips", ylab = "Subway Total Estimated Ridership")
+```
+
+```{r}
+plot(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`, main = "Bridges and Tunnels Total Traffic v Subway Total Estimated Ridership", xlab = "Bridges and Tunnels Total Traffic", ylab = "Subway Total Estimated Ridership")
+```
+
+```{r}
+plot(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "SIR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "SIR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
+```
+
+
+```{r}
+cor(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Buses: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`LIRR: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Metro-North: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Access-A-Ride: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+```
+
+```{r}
+cor(df$`Staten Island Railway: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+```
+
+# Regression Question
+
+## Can we predict total estimated subway ridership based on pandemic/post-pandemic trends and while considering external factors such as economic indicators?
+
+## --- Multiple Linear Regression ---
+
+```{r}
+# Subways: Total Estimated Ridership
+
+full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
+
+summary(full_model)
+
+```
+
+```{r}
+plot(full_model)
+```
+
+
+```{r}
+#NO Date, Bridges and Tunnels: % of Comparable Pre-Pandemic Day
+reduced_model <- lm(`Subways: Total Estimated Ridership` ~ . -Date -`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, data = df)
+summary(reduced_model)
+```
+
+```{r}
+plot(reduced_model)
+```
+
+
+```{r}
+anova(full_model, reduced_model)
+```
+
+```{r}
+library(car)
+vif_full <- vif(full_model)
+vif_full
+```
+
+```{r}
+vif_reduced <- vif(reduced_model)
+vif_reduced
+```
+
+
+
+```{r}
+predicted_full <- predict(full_model, df)
+
+rmse_full <- sqrt(mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
+rmse_full
+```
+
+```{r}
+predicted_reduced <- predict(reduced_model, df)
+
+rmse_reduced <- sqrt(mean((df$`Subways: Total Estimated Ridership` - predicted_reduced)^2))
+rmse_reduced
+```
+
+
+```{r}
+set.seed(1234)
+library(boot)
+
+cv_error_full <- cv.glm(df, full_model, K = 10)
+cv_error_full$delta[1]  
+sqrt(cv_error_full$delta[1])  
+```
+
+```{r}
+set.seed(1234)
+library(boot)
+
+cv_error_reduced <- cv.glm(df, reduced_model, K = 10)
+cv_error_reduced$delta[1]  
+sqrt(cv_error_reduced$delta[1])
+```
+
+
+# Classification Question
+
+## Can we categorize daily ridership levels as “low,” “average,” or “high” based on total ridership numbers?
+
+
+```{r}
+### combining ridership 
+df$total_ridership <- (df$`Subways: Total Estimated Ridership`+
+                         df$`Buses: Total Estimated Ridership`+
+                         df$`LIRR: Total Estimated Ridership`+
+                         df$`Metro-North: Total Estimated Ridership`+
+                         df$`Staten Island Railway: Total Estimated Ridership`)
+```
+
+```{r}
+mean_total <- mean(df$total_ridership)
+sd_total <- sd(df$total_ridership)
+```
+
+```{r}
+df$total_ridership_level <- cut(
+  df$total_ridership,
+  breaks = c(-Inf, mean_total - sd_total, mean_total + sd_total, Inf),
+  labels = c("Low", "Average", "High")
+)
+```
+
+
+
+```{r}
+predictors <- c(
+  "Subways: % of Comparable Pre-Pandemic Day",
+  "Buses: % of Comparable Pre-Pandemic Day",
+  "LIRR: % of Comparable Pre-Pandemic Day",
+  "Metro-North: % of Comparable Pre-Pandemic Day",
+  "Access-A-Ride: % of Comparable Pre-Pandemic Day",
+  "Bridges and Tunnels: % of Comparable Pre-Pandemic Day",
+  "Staten Island Railway: % of Comparable Pre-Pandemic Day"
+)
+```
+
+
+
+## ---- KNN ---- 
+```{r}
+df_knn <- na.omit(df[, c(predictors, "total_ridership_level")])
+
+```
+
+
+
+```{r}
+set.seed(1234)
+
+Z = sample(nrow(df_knn), .5*nrow(df_knn))
+
+train = df_knn[Z, predictors]
+
+test = df_knn[-Z, predictors]
+
+cl = df_knn$total_ridership_level[Z]
+test_cl = df_knn$total_ridership_level[-Z]
+
+```
+
+```{r}
+Yhat <- knn(train, test, cl, k = 3)
+```
+
+```{r}
+conf_matx <- table(Predicted = Yhat, Actual = test_cl)
+conf_matx 
+```
+
+```{r}
+accuracy <- sum(diag(conf_matx)) / sum(conf_matx)
+accuracy
+```
+
+
+```{r}
+class_rates <- numeric(100)
+
+for(k in 1:100){
+  Yhat_k <- knn(train, test, cl, k = k)
+  
+  conf_matx_k <- table(Predicted = Yhat_k, Actual = test_cl)
+  
+  class_rates[k] <- sum(diag(conf_matx_k)) / sum(conf_matx_k)
+}
+```
+
+```{r}
+best_k <- which.max(class_rates)
+best_k
+```
+
+```{r}
+plot(1:100, class_rates, type = "b", pch = 19, col = "blue",
+     xlab = "K Value", ylab = "Classification Accuracy")
+
+abline(v = best_k, col = "red", lty = 3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
