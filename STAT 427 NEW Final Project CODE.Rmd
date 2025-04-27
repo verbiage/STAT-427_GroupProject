@@ -1,0 +1,114 @@
+---
+title: "STAT 427 NEW Final Project CODE"
+author: "Leigh Cummings"
+date: "2025-04-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(MASS)
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data <- read_csv(url)
+
+mta_data <- mta_data %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y")) %>%
+  select(Date, Subway_Ridership = `Subways: Total Estimated Ridership`) %>%
+  drop_na()
+
+mta_data <- mta_data %>%
+  mutate(Day_Num = as.numeric(Date - min(Date)))
+
+```
+
+
+```{r}
+#Polynomial Regression
+poly_model <- lm(Subway_Ridership ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = mta_data)
+
+mta_data <- mta_data %>%
+  mutate(Predicted_Ridership = predict(poly_model, newdata = mta_data))
+
+mse <- mean((mta_data$Subway_Ridership - mta_data$Predicted_Ridership)^2)
+print(paste("Mean Squared Error:", round(mse, 2)))
+
+ggplot(mta_data, aes(x = Date)) +
+  geom_line(aes(y = Subway_Ridership), color = "blue", size = 1, alpha = 0.7) +
+  geom_line(aes(y = Predicted_Ridership), color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Actual vs Predicted Subway Ridership Over Time",
+    y = "Estimated Ridership",
+    x = "Date"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+quantiles <- quantile(mta_data$Subway_Ridership, probs = c(0.33, 0.66))
+mta_data <- mta_data %>%
+  mutate(Ridership_Level = case_when(
+    Subway_Ridership <= quantiles[1] ~ "Low",
+    Subway_Ridership <= quantiles[2] ~ "Average",
+    TRUE ~ "High"
+  ))
+
+# QDA
+qda_model <- qda(Ridership_Level ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = mta_data)
+qda_predictions <- predict(qda_model, mta_data)$class
+
+accuracy <- mean(qda_predictions == mta_data$Ridership_Level)
+print(paste("QDA Accuracy:", round(accuracy * 100, 2), "%"))
+
+ggplot(mta_data, aes(x = Date, y = Subway_Ridership, color = Ridership_Level)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = c("Low" = "blue", "Average" = "orange", "High" = "green")) +
+  labs(
+    title = "Daily Subway Ridership Classified by Level",
+    y = "Estimated Ridership",
+    x = "Date",
+    color = "Ridership Level"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+set.seed(123)
+k <- 5
+folds <- sample(rep(1:k, length.out = nrow(mta_data)))
+
+mse_values <- c()
+accuracy_values <- c()
+
+for(i in 1:k){
+  train_data <- mta_data[folds != i, ]
+  test_data <- mta_data[folds == i, ]
+  
+  # Polynomial Regression CV
+  poly_model_cv <- lm(Subway_Ridership ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = train_data)
+  pred_poly <- predict(poly_model_cv, newdata = test_data)
+  mse_fold <- mean((test_data$Subway_Ridership - pred_poly)^2)
+  mse_values <- c(mse_values, mse_fold)
+  
+  # QDA CV
+  qda_model_cv <- qda(Ridership_Level ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = train_data)
+  qda_pred <- predict(qda_model_cv, newdata = test_data)$class
+  acc_fold <- mean(qda_pred == test_data$Ridership_Level)
+  accuracy_values <- c(accuracy_values, acc_fold)
+}
+
+avg_mse <- mean(mse_values)
+avg_accuracy <- mean(accuracy_values)
+
+print(paste("Average MSE from Cross-Validation:", round(avg_mse, 2)))
+print(paste("Average QDA Accuracy from Cross-Validation:", round(avg_accuracy * 100, 2), "%"))
+
+```
+
