@@ -126,7 +126,7 @@ ggplot(df_long, aes(x = Other_Value, y = `Subways: Total Estimated Ridership`)) 
 
 
 
-# Corrolations
+# Correlations
 ```{r}
 numeric_cols <- names(df)[sapply(df, is.numeric) & names(df) != "Subways: Total Estimated Ridership"]
 
@@ -157,8 +157,8 @@ print(correlation_results)
 full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
 
 summary(full_model)
-
 ```
+### The model explains about 99.45% of the variability in subway ridership, which is extremely high. With an F-stat of 22,890 and a p-value < 2.2e-16, the overall model is highly statistically significant.
 
 ```{r}
 plot(full_model)
@@ -170,11 +170,15 @@ plot(full_model)
 reduced_model <- lm(`Subways: Total Estimated Ridership` ~ . -Date -`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, data = df)
 summary(reduced_model)
 ```
+### This model still explains about 99.45% of the variability in subway ridership, which is extremely high. The F-stat is still pretty high at 26,630 and a low p-value. The overall model is still statistically significant.
 
 ```{r}
 plot(reduced_model)
 ```
 
+```{r}
+step(reduced_model)
+```
 
 ```{r}
 anova(full_model, reduced_model)
@@ -186,13 +190,6 @@ vif_full
 ```
 
 ```{r}
-vif_reduced <- vif(reduced_model)
-vif_reduced
-```
-
-
-
-```{r}
 predicted_full <- predict(full_model, df)
 
 rmse_full <- sqrt(mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
@@ -200,27 +197,36 @@ rmse_full
 ```
 
 ```{r}
-predicted_reduced <- predict(reduced_model, df)
-
-rmse_reduced <- sqrt(mean((df$`Subways: Total Estimated Ridership` - predicted_reduced)^2))
-rmse_reduced
-```
-
-
-```{r}
-set.seed(1234)
-
-cv_error_full <- cv.glm(df, full_model, K = 10)
-cv_error_full$delta[1]  
-sqrt(cv_error_full$delta[1])  
+mse_full <- (mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
+mse_full
 ```
 
 ```{r}
 set.seed(1234)
+train_control <- trainControl(method = "cv", number = 10)
 
-cv_error_reduced <- cv.glm(df, reduced_model, K = 10)
-cv_error_reduced$delta[1]  
-sqrt(cv_error_reduced$delta[1])
+model_cv <- train(
+  `Subways: Total Estimated Ridership` ~ .,
+  data = df,
+  method = "lm",
+  trControl = train_control
+)
+
+print(model_cv)
+```
+### Similar to predicted RMSE for the full model, the cross-validated RMSE shows that there is an average daily prediction error of approximately 80,000 riders. The R^2 is very high, and suggests that the model explains over 99% of the variability in subway ridership. 
+
+```{r}
+options(scipen = 999)
+actual <- df$`Subways: Total Estimated Ridership`
+predicted <- predicted_full
+
+plot(actual, predicted,
+     xlab = "Actual Subway Ridership (Billions)",
+     ylab = "Predicted Subway Ridership (Billions)",
+     main = "Predicted vs. Actual Subway Ridership",
+     pch = 19, col = "steelblue")
+abline(a = 0, b = 1, col = "red", lwd = 2)
 ```
 
 
@@ -239,19 +245,15 @@ df$total_ridership <- (df$`Subways: Total Estimated Ridership`+
 ```
 
 ```{r}
-mean_total <- mean(df$total_ridership)
-sd_total <- sd(df$total_ridership)
-```
 
-```{r}
+quantiles <- quantile(df$total_ridership, probs = c(0.33, 0.66))
+
 df$total_ridership_level <- cut(
   df$total_ridership,
-  breaks = c(-Inf, mean_total - sd_total, mean_total + sd_total, Inf),
+  breaks = c(-Inf, quantiles[1], quantiles[2], Inf),
   labels = c("Low", "Average", "High")
 )
 ```
-
-
 
 ```{r}
 predictors <- c(
@@ -306,6 +308,8 @@ accuracy <- sum(diag(conf_matx)) / sum(conf_matx)
 accuracy
 ```
 
+### Errors mostly happen around the Low v Average and Average v High boundary. Pretty high accuracy. 
+
 
 ```{r}
 class_rates <- numeric(100)
@@ -323,8 +327,10 @@ for(k in 1:100){
 best_k <- which.max(class_rates)
 best_k
 ```
+### k = 1 performed the best but this could be indicative that the model may be overfitting. 
 
 ```{r}
+#Kennedy's comment
 "I think there could be some potential overfitting of the training data implied by best_k = 1. The model might be learning the noise and specific details of the training set rather than the underlying generalizable patterns and i think this will probably lead to poor performance on new, unseen data. A k=1 model is highly sensitive to outliers
 
 Even if the cross-validation accuracy was high with k=1, it's still susceptible to overfitting, especially if the dataset has noise or outliers. I have done previous projects with KNN before where I get low k values and high accuracy, when those two combine whether or not the model is acceptable will depend on the project's context."
