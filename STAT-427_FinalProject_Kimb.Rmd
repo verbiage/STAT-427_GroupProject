@@ -27,7 +27,7 @@ library(tree)
 library(randomForest)
 library(splines)
 library(rpart)
-library(rpart.plot)
+#library(rpart.plot)  - I don't know this library, not too sure what it is. 
 library(car)
 ```
 
