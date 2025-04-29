@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+#git link: https://github.com/verbiage/STAT-427_GroupProject.git
+
+```
+
 ```{r pressure, echo=FALSE, message=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -35,6 +40,7 @@ library(car)
 directory_path <- "C:/Users/jkimb/OneDrive/Desktop/School/Classes/VII. Spring 2025 (LAST SEM BABY)/ONL_STAT-427_StatisticalMachineLearning/Projects"
 
 setwd(directory_path)
+
 ```
 
 ```{r}
