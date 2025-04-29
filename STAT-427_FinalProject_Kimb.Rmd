@@ -145,6 +145,30 @@ correlation_results <- df %>%
 print(correlation_results)
 ```
 
+
+
+# Data Summary Table
+```{r}
+df_with_year <- df %>%
+  mutate(Year = year(Date))
+
+ridership_summary <- df_with_year %>%
+  group_by(Year) %>%
+  summarize(
+    Total_Subway_Ridership = sum(`Subways: Total Estimated Ridership`, na.rm = TRUE),
+    Total_Bus_Ridership = sum(`Buses: Total Estimated Ridership`, na.rm = TRUE),
+    Total_LIRR_Ridership = sum(`LIRR: Total Estimated Ridership`, na.rm = TRUE),
+    Total_MNR_Ridership = sum(`Metro-North: Total Estimated Ridership`, na.rm = TRUE),
+    Total_SIR_Ridership = sum(`Staten Island Railway: Total Estimated Ridership`, na.rm = TRUE),
+    Total_AAR_Ridership =sum(`Access-A-Ride: Total Scheduled Trips`, na.rm = TRUE),
+  ) %>%
+  filter(Year != 2025)
+
+
+print(ridership_summary)
+```
+
+
 # Regression Question
 
 ## Can we predict total estimated subway ridership based on pandemic/post-pandemic trends and while considering external factors such as economic indicators?
