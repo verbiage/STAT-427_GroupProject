@@ -9,9 +9,14 @@ NYC transit ridership recovery trends from pandemic times to now. By predicting 
 ridership trends and classifying usage patterns, the findings will offer insights into public 
 transit demand shifts, which can inform future transportation policies.  
 
-### Questions of Interest:  
+### Initial Questions of Interest:  
   + Regression Question: Can we predict total estimated subway ridership based on pandemic/post-pandemic trends and while considering external factors such as economic indicators? 
   + Classification Question: Can we categorize daily ridership levels as “low,” “average,” or “high” based on total ridership numbers?
+
+### New Questions of Interest:
+  + Regression Question: What type of regression model best predicts total daily subway ridership?
+  + Classification Question: Can predict “low,” “average,” or “high” ridership by using classification statistical learning methods?
+
 
 ### Planned Methods: 
 + For Regression 
