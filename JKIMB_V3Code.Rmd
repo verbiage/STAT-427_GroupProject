@@ -440,12 +440,129 @@ plot(1:100, class_rates, type = "b", pch = 19, col = "blue",
 abline(v = best_k, col = "red", lty = 3)
 ```
 
+### QDA (Leight left our group)
+
+```{r}
+set.seed(1234)
+
+train_df <- df_knn[Z, ]
+test_df <- df_knn[-Z, ]
 
 
+qda_model <- qda(total_ridership_level ~ ., data = train_df)
 
 
+qda_pred <- predict(qda_model, test_df)
 
 
+conf_matx_qda <- table(Predicted = qda_pred$class, Actual = test_df$total_ridership_level)
+conf_matx_qda
+
+
+accuracy_qda <- sum(diag(conf_matx_qda)) / sum(conf_matx_qda)
+accuracy_qda
+
+```
+
+```{r}
+### k-fold cv for qda
+set.seed(1234)
+
+k <- 10
+folds <- sample(rep(1:k, length.out = nrow(df_knn)))
+cv_accuracies <- numeric(k)
+
+levels <- levels(df_knn$total_ridership_level)
+overall_conf_matx <- matrix(0, nrow = 3, ncol = 3, dimnames = list(Predicted = levels, Actual = levels))
+
+for (i in 1:k) {
+  test_idx <- which(folds == i)
+  train_data <- df_knn[-test_idx, ]
+  test_data <- df_knn[test_idx, ]
+  
+  cv_qda_model <- qda(total_ridership_level ~ ., data = train_data)
+  predictions <- predict(cv_qda_model, test_data)$class
+  
+  cv_conf_matx <- table(factor(predictions, levels = levels),
+                        factor(test_data$total_ridership_level, levels = levels))
+  
+  overall_conf_matx <- overall_conf_matx + cv_conf_matx
+  cv_accuracies[i] <- sum(diag(cv_conf_matx)) / sum(cv_conf_matx)
+}
+
+overall_conf_matx
+mean(cv_accuracies)
+```
+
+```{r}
+#combined regression plot
+response_var <- "Subways: Total Estimated Ridership"
+predictor_vars <- c("Buses: Total Estimated Ridership", 
+                    "LIRR: Total Estimated Ridership", 
+                    "Metro-North: Total Estimated Ridership",
+                    "Access-A-Ride: Total Scheduled Trips", 
+                    "Bridges and Tunnels: Total Traffic", 
+                    "Staten Island Railway: Total Estimated Ridership")
+
+df_clean <- na.omit(df[, c(response_var, predictor_vars)])
+
+
+x <- as.matrix(df_clean[, predictor_vars])
+y <- df_clean[[response_var]]
+
+
+set.seed(1234)
+train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
+x_train <- x[train_indices, ]
+y_train <- y[train_indices]
+x_test  <- x[-train_indices, ]
+y_test  <- y[-train_indices]
+
+
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
+
+
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
+
+
+full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
+predicted_full <- predict(full_model, df)
+
+
+mlr_plot_df <- data.frame(Actual = df$`Subways: Total Estimated Ridership`, 
+                          Predicted = predicted_full, 
+                          Model = "Linear Regression")
+
+ridge_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(ridge_pred), 
+                            Model = "Ridge Regression")
+
+lasso_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(lasso_pred), 
+                            Model = "Lasso Regression")
+
+
+combined_df <- rbind(mlr_plot_df, ridge_plot_df, lasso_plot_df)
+
+
+ggplot(combined_df, aes(x = Actual, y = Predicted, color = Model)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "black", linetype = "dashed") +
+  labs(
+    title = "\n         Predicted vs Actual Subway Ridership",
+    x = "Actual Ridership (Billions)",
+    y = "Predicted Ridership (Billions)",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+```
 
 
 

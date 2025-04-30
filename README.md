@@ -38,14 +38,14 @@ transit demand shifts, which can inform future transportation policies.
   + J-La: 
     + Regression: Multiple Linear Regression 
     + Classification: K-Nearest Neighbors (KNN) 
-    + Cross-Validation & Model Evaluation: K-Fold CV for MLR & KNN + MSE for MLR 
+    + Cross-Validation & Model Evaluation: K-Fold CV for MLR & KNN + MSE for MLR
+    + Classification: Quadratic Discriminant Analysis (QDA)
+    + Cross-Validation: Accuracy Metrics for QDA 
   + Kennedy: 
     + Regression: Ridge/Lasso Regression  
     + Classification: Decision Trees & Random Forest 
     +  Cross-Validation & Model Evaluation: K-Fold CV for Ridge/Lasso & Decision Trees + Model Accuracy Metrics for Decision Trees 
-  + Leigh: 
     + Regression: Polynomial Regression 
-    + Classification: Quadratic Discriminant Analysis (QDA) 
-    + Cross-Validation & Model Evaluation: K-Fold CV for Polynomial Regression & QDA + MSE for Polynomial Regression & Accuracy Metrics for QDA 
+    +  Model Evaluation: K-Fold CV for Polynomial Regression & MSE
 + Visualization & Presentation Design: All members 
 + Report Writing & Editing: All members
