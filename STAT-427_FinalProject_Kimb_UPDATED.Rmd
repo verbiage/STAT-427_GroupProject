@@ -9,6 +9,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+```{r}
+#git link: https://github.com/verbiage/STAT-427_GroupProject.git
+
+```
+
+
 ```{r pressure, echo=FALSE, message=FALSE}
 library(tidyverse)
 library(readr)
@@ -73,71 +80,83 @@ colnames(df)
 hist(df$`Subways: Total Estimated Ridership`, main = "Total Estimated Subway Ridership")
 ```
 
+
+### Pretty normal. Looks unimodal and fairly symmetrical. Wouldn't say there is evidence of skewness in either the positive or negative direction. No indication of the presence of outliers, either. 
+
+
 ```{r}
 hist(df$`Buses: Total Estimated Ridership`, main = "Total Estimated Buses Ridership")
 ```
+
+
+### Unimodal and non-symmetrical. Looks skewed to the left (negative direction). Right-most bins appear detached from the rest, potentially indicating the presence of outliers.
+
 
 ```{r}
 hist(df$`LIRR: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership")
 ```
 
 
+### Unimodal, but not quite symmetric. There is a right-tail, indicating slight positive skewness, and the potential presence of outliers. 
+
+
 ```{r}
 hist(df$`Metro-North: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership")
 ```
 
+### Pretty normal. Looks unimodal, but non-symmetrical. Wouldn't say there is evidence of skewness in either the positive or negative direction. No indication of the presence of outliers, either. 
 
 ```{r}
 hist(df$`Staten Island Railway: Total Estimated Ridership`, main = "SIR Total Estimated Ridership")
 ```
 
-### Looks Skewed Left
+### Non-symmetrical and unimodal. Looks skewed to the right  (positive direction). Right-most bins appear detached from the rest, potentially indicating the presence of outliers.
 
 ```{r}
 plot(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`, main = "Subway % of Comparable Pre-Pandemic Day v Subway Total Estimated Ridership", xlab = "Subway % of Comparable Pre-Pandemic Day", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### 
 
 ```{r}
 plot(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Buses Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Buses Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Although broken, somewhat of a positive trend, from left-to-right. There are outliers present, especially in the left-most bottom and right-most top corners. At the origin, points are broken from the main cluster of points and there appears to be bit of vertical stacking which suggests that some Bus Total Estimated Ridership numbers are similar to the values of Subway Total Estimated Ridership. 
 
 ```{r}
 plot(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "LIRR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "LIRR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Definite positive trend from left-to-right, indicating that as LIRR Total Estimated Ridership increases, Subway Total Estimated Ridership does as well. Outliers do appear present, especially towards the right-most, upper corner of the plot. 
 
 
 ```{r}
 plot(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "Metro-North Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "Metro-North Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Definite positive trend from left-to-right, indicating that as LIRR Total Estimated Ridership increases, Subway Total Estimated Ridership does as well. Outliers do appear present. 
 
 
 ```{r}
 plot(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`, main = "Access-A-Ride Total Scheduled Trips v Subway Total Estimated Ridership", xlab = "Access-A-Ride Total Scheduled Trips", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Positive trend from left-to-right, indicating that as LIRR Total Estimated Ridership increases, Subway Total Estimated Ridership does as well. Outliers do appear present, especially towards the right-most, upper corner of the plot. 
 
 
 ```{r}
 plot(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`, main = "Bridges and Tunnels Total Traffic v Subway Total Estimated Ridership", xlab = "Bridges and Tunnels Total Traffic", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Positive trend from left-to-right with the presence of outliers. Most points are clustered towards the right-most side of the plot, leaving sort of a tail on the left. 
 
 
 ```{r}
 plot(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`, main = "SIR Total Estimated Ridership v Subway Total Estimated Ridership", xlab = "SIR Total Estimated Ridership", ylab = "Subway Total Estimated Ridership")
 ```
 
-###
+### Positive trend from left-to-right with the definite presence of outliers. At the origin, there is vertical stacking which suggests that some SIR Total Estimated Ridership numbers are similar to the values of Subway Total Estimated Ridership. 
 
 
 ```{r}
@@ -232,6 +251,9 @@ cor(df$`Staten Island Railway: % of Comparable Pre-Pandemic Day`, df$`Subways: T
 # Regression Question
 
 ## Can we predict total estimated subway ridership based on pandemic/post-pandemic trends and while considering external factors such as economic indicators?
+
+### Changed Question: What type of regression model best predicts total daily subway ridership?
+
 
 ## --- Multiple Linear Regression ---
 
@@ -332,81 +354,12 @@ abline(a = 0, b = 1, col = "red", lwd = 2)
 ```
 
 
-```{r}
-response_var <- "Subways: Total Estimated Ridership"
-predictor_vars <- c("Buses: Total Estimated Ridership", 
-                    "LIRR: Total Estimated Ridership", 
-                    "Metro-North: Total Estimated Ridership",
-                    "Access-A-Ride: Total Scheduled Trips", 
-                    "Bridges and Tunnels: Total Traffic", 
-                    "Staten Island Railway: Total Estimated Ridership")
-
-df_clean <- na.omit(df[, c(response_var, predictor_vars)])
-
-
-x <- as.matrix(df_clean[, predictor_vars])
-y <- df_clean[[response_var]]
-
-
-set.seed(168)
-train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
-x_train <- x[train_indices, ]
-y_train <- y[train_indices]
-x_test  <- x[-train_indices, ]
-y_test  <- y[-train_indices]
-
-
-ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
-ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
-
-
-lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
-lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
-
-
-full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
-predicted_full <- predict(full_model, df)
-
-
-mlr_plot_df <- data.frame(Actual = df$`Subways: Total Estimated Ridership`, 
-                          Predicted = predicted_full, 
-                          Model = "Linear Regression")
-
-ridge_plot_df <- data.frame(Actual = y_test, 
-                            Predicted = as.numeric(ridge_pred), 
-                            Model = "Ridge Regression")
-
-lasso_plot_df <- data.frame(Actual = y_test, 
-                            Predicted = as.numeric(lasso_pred), 
-                            Model = "Lasso Regression")
-
-
-combined_df <- rbind(mlr_plot_df, ridge_plot_df, lasso_plot_df)
-
-
-ggplot(combined_df, aes(x = Actual, y = Predicted, color = Model)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(intercept = 0, slope = 1, color = "black", linetype = "dashed") +
-  labs(
-    title = "\n         Predicted vs Actual Subway Ridership",
-    x = "Actual Ridership (Billions)",
-    y = "Predicted Ridership (Billions)",
-    color = "Model"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10)
-  )
-```
-
-
-
-
 # Classification Question
 
 ## Can we categorize daily ridership levels as “low,” “average,” or “high” based on total ridership numbers?
+
+## Changed Question: Can predict “low,” “average,” or “high” ridership by using classification statistical learning methods?
+
 
 
 ```{r}
@@ -516,7 +469,74 @@ abline(v = best_k, col = "red", lty = 7)
 
 
 
+```{r}
+response_var <- "Subways: Total Estimated Ridership"
+predictor_vars <- c("Buses: Total Estimated Ridership", 
+                    "LIRR: Total Estimated Ridership", 
+                    "Metro-North: Total Estimated Ridership",
+                    "Access-A-Ride: Total Scheduled Trips", 
+                    "Bridges and Tunnels: Total Traffic", 
+                    "Staten Island Railway: Total Estimated Ridership")
 
+df_clean <- na.omit(df[, c(response_var, predictor_vars)])
+
+
+x <- as.matrix(df_clean[, predictor_vars])
+y <- df_clean[[response_var]]
+
+
+set.seed(1234)
+train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
+x_train <- x[train_indices, ]
+y_train <- y[train_indices]
+x_test  <- x[-train_indices, ]
+y_test  <- y[-train_indices]
+
+
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
+
+
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
+
+
+full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
+predicted_full <- predict(full_model, df)
+
+
+mlr_plot_df <- data.frame(Actual = df$`Subways: Total Estimated Ridership`, 
+                          Predicted = predicted_full, 
+                          Model = "Linear Regression")
+
+ridge_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(ridge_pred), 
+                            Model = "Ridge Regression")
+
+lasso_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(lasso_pred), 
+                            Model = "Lasso Regression")
+
+
+combined_df <- rbind(mlr_plot_df, ridge_plot_df, lasso_plot_df)
+
+
+ggplot(combined_df, aes(x = Actual, y = Predicted, color = Model)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "black", linetype = "dashed") +
+  labs(
+    title = "\n         Predicted vs Actual Subway Ridership",
+    x = "Actual Ridership (Billions)",
+    y = "Predicted Ridership (Billions)",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+```
 
 
 
