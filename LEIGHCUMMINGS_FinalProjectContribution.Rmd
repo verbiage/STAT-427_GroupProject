@@ -1,0 +1,538 @@
+---
+title: "LEIGHCUMMINGS_STAT-427_FinalProjectContribution-with-CodeComparison"
+author: "J.Kimbrough and K. Rodriguez"
+date: "2025-04-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#LEIGH
+
+```{r}
+# Data Preprocessing
+
+#had to add dplyr:: before select - for her code to run (JKimb)
+
+library(tidyverse)
+library(lubridate)
+library(MASS)
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data <- read_csv(url)
+
+
+mta_data <- mta_data %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
+mta_data <- mta_data %>%
+  dplyr::rename(Subway_Ridership = `Subways: Total Estimated Ridership`) %>%
+  dplyr::select(Date, Subway_Ridership) %>%
+  drop_na()
+
+mta_data <- mta_data %>%
+  mutate(
+    DayOfWeek = wday(Date, label = TRUE),
+    Month = month(Date),
+    Year = year(Date),
+    Day = day(Date)
+  )
+```
+
+
+```{r}
+#Polynomial Regression
+
+mta_data <- mta_data %>%
+  mutate(
+    Day_Num = as.numeric(Date - min(Date)),
+    Day_Num2 = Day_Num^2,
+    Day_Num3 = Day_Num^3
+  )
+
+#Polynomial Regression Model
+poly_model <- lm(Subway_Ridership ~ Day_Num + Day_Num2 + Day_Num3, data = mta_data)
+
+summary(poly_model)
+
+#MSE
+mta_data <- mta_data %>%
+  mutate(Predicted_Ridership = predict(poly_model, newdata = mta_data))
+
+mse <- mean((mta_data$Subway_Ridership - mta_data$Predicted_Ridership)^2)
+print(paste("Mean Squared Error:", round(mse, 2)))
+
+# Plot
+ggplot(mta_data, aes(x = Date)) +
+  geom_line(aes(y = Subway_Ridership), color = "blue", size = 1) +
+  geom_line(aes(y = Predicted_Ridership), color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted Subway Ridership",
+       y = "Ridership",
+       x = "Date") +
+  theme_minimal()
+```
+
+
+```{r}
+
+#had to add dplyr:: before select - for her code to run (JKimb)
+
+# Quadratic Discriminant Analysis (QDA)
+quantiles <- quantile(mta_data$Subway_Ridership, probs = c(0.33, 0.66))
+mta_data <- mta_data %>%
+  mutate(Ridership_Level = case_when(
+    Subway_Ridership <= quantiles[1] ~ "Low",
+    Subway_Ridership <= quantiles[2] ~ "Average",
+    TRUE ~ "High"
+  ))
+
+qda_data <- mta_data %>%
+  dplyr::select(Day_Num, Day_Num2, Day_Num3, Ridership_Level)
+
+#QDA Model
+qda_model <- qda(Ridership_Level ~ Day_Num + Day_Num2 + Day_Num3, data = qda_data)
+
+#Accuracy
+qda_predictions <- predict(qda_model, qda_data)$class
+accuracy <- mean(qda_predictions == qda_data$Ridership_Level)
+print(paste("QDA Accuracy:", round(accuracy * 100, 2), "%"))
+
+# Confusion Matrix
+table(Predicted = qda_predictions, Actual = qda_data$Ridership_Level)
+```
+
+
+```{r}
+# K-Fold Cross-Validation
+
+set.seed(123)
+k <- 5
+folds <- sample(rep(1:k, length.out = nrow(mta_data)))
+
+mse_values <- c()
+accuracy_values <- c()
+
+#Split Data
+for(i in 1:k){
+  train_data <- mta_data[folds != i, ]
+  test_data <- mta_data[folds == i, ]
+  
+#Polynomial Regression
+  poly_model_cv <- lm(Subway_Ridership ~ Day_Num + Day_Num2 + Day_Num3, data = train_data)
+  predictions <- predict(poly_model_cv, newdata = test_data)
+  mse_fold <- mean((test_data$Subway_Ridership - predictions)^2)
+  mse_values <- c(mse_values, mse_fold)
+  
+#QDA
+  qda_model_cv <- qda(Ridership_Level ~ Day_Num + Day_Num2 + Day_Num3, data = train_data)
+  qda_pred <- predict(qda_model_cv, test_data)$class
+  acc_fold <- mean(qda_pred == test_data$Ridership_Level)
+  accuracy_values <- c(accuracy_values, acc_fold)
+}
+
+# Average MSE and Accuracy
+avg_mse <- mean(mse_values)
+avg_accuracy <- mean(accuracy_values)
+
+print(paste("Average MSE from Cross-Validation:", round(avg_mse, 2)))
+print(paste("Average Accuracy from Cross-Validation:", round(avg_accuracy * 100, 2), "%"))
+```
+
+
+```{r}
+#ADDITIONAL Graphics
+
+## Daily Ridership Classification ("Low", "Average", "High")
+
+ggplot(mta_data, aes(x = Date, y = Subway_Ridership, color = Ridership_Level)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Low" = "blue", "Average" = "orange", "High" = "green")) +
+  labs(
+    title = "Daily Subway Ridership Classified by Level",
+    y = "Estimated Ridership",
+    x = "Date",
+    color = "Ridership Level"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#  QDA Decision Boundaries
+library(ggplot2)
+
+ggplot(mta_data, aes(x = Day_Num, y = Day_Num2, color = Ridership_Level)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Low" = "blue", "Average" = "orange", "High" = "green")) +
+  labs(
+    title = "QDA Classification Boundary Approximation",
+    x = "Day Number",
+    y = "Day Number Squared",
+    color = "Ridership Level"
+  ) +
+  theme_minimal()
+```
+
+
+## HER REVISED CODE
+
+```{r}
+#had to add dplyr:: before select - for her code to run (JKimb)
+
+library(tidyverse)
+library(lubridate)
+library(MASS)
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data <- read_csv(url)
+
+mta_data <- mta_data %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y")) %>%
+  dplyr::select(Date, Subway_Ridership = `Subways: Total Estimated Ridership`) %>%
+  drop_na()
+
+mta_data <- mta_data %>%
+  mutate(Day_Num = as.numeric(Date - min(Date)))
+
+#Added this per ChatGPT recommendation b/c her revised code was NOT running (JKimb)
+mta_data <- mta_data %>%
+  mutate(
+    Ridership_Level = case_when(
+      Subway_Ridership < quantile(Subway_Ridership, 1/3) ~ "Low",
+      Subway_Ridership < quantile(Subway_Ridership, 2/3) ~ "Average",
+      TRUE ~ "High"
+    ),
+    Ridership_Level = factor(Ridership_Level, levels = c("Low", "Average", "High"))
+  )
+
+```
+
+
+```{r}
+#Polynomial Regression
+poly_model <- lm(Subway_Ridership ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = mta_data)
+
+mta_data <- mta_data %>%
+  mutate(Predicted_Ridership = predict(poly_model, newdata = mta_data))
+
+mse <- mean((mta_data$Subway_Ridership - mta_data$Predicted_Ridership)^2)
+print(paste("Mean Squared Error:", round(mse, 2)))
+
+ggplot(mta_data, aes(x = Date)) +
+  geom_line(aes(y = Subway_Ridership), color = "blue", size = 1, alpha = 0.7) +
+  geom_line(aes(y = Predicted_Ridership), color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Actual vs Predicted Subway Ridership Over Time",
+    y = "Estimated Ridership",
+    x = "Date"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+#Polynomial Regression
+poly_model <- lm(Subway_Ridership ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = mta_data)
+
+mta_data <- mta_data %>%
+  mutate(Predicted_Ridership = predict(poly_model, newdata = mta_data))
+
+mse <- mean((mta_data$Subway_Ridership - mta_data$Predicted_Ridership)^2)
+print(paste("Mean Squared Error:", round(mse, 2)))
+
+ggplot(mta_data, aes(x = Date)) +
+  geom_line(aes(y = Subway_Ridership), color = "blue", size = 1, alpha = 0.7) +
+  geom_line(aes(y = Predicted_Ridership), color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Actual vs Predicted Subway Ridership Over Time",
+    y = "Estimated Ridership",
+    x = "Date"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+set.seed(123)
+k <- 5
+folds <- sample(rep(1:k, length.out = nrow(mta_data)))
+
+mse_values <- c()
+accuracy_values <- c()
+
+for(i in 1:k){
+  train_data <- mta_data[folds != i, ]
+  test_data <- mta_data[folds == i, ]
+  
+  # Polynomial Regression CV
+  poly_model_cv <- lm(Subway_Ridership ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = train_data)
+  pred_poly <- predict(poly_model_cv, newdata = test_data)
+  mse_fold <- mean((test_data$Subway_Ridership - pred_poly)^2)
+  mse_values <- c(mse_values, mse_fold)
+  
+  # QDA CV
+  qda_model_cv <- qda(Ridership_Level ~ Day_Num + I(Day_Num^2) + I(Day_Num^3), data = train_data)
+  qda_pred <- predict(qda_model_cv, newdata = test_data)$class
+  acc_fold <- mean(qda_pred == test_data$Ridership_Level)
+  accuracy_values <- c(accuracy_values, acc_fold)
+}
+
+avg_mse <- mean(mse_values)
+avg_accuracy <- mean(accuracy_values)
+
+print(paste("Average MSE from Cross-Validation:", round(avg_mse, 2)))
+print(paste("Average QDA Accuracy from Cross-Validation:", round(avg_accuracy * 100, 2), "%"))
+```
+
+
+
+```{r}
+"We did her portion, since she decided to leave our group - these were our results"
+```
+
+
+# Kennedy Code for Polynomial Regression
+
+```{r}
+library(tidyverse) 
+
+library(lubridate) 
+
+library(dbplyr) 
+
+library(readr) 
+
+library(RSQLite) 
+
+library(ggthemes) 
+
+library(ggplot2) 
+
+library(class) 
+
+library(caret) 
+
+library(glmnet) 
+
+library(ISLR2) 
+
+library(MASS) 
+
+library(boot) 
+
+library(tree) 
+
+library(randomForest) 
+
+library(splines) 
+
+library(rpart) 
+
+library(rpart.plot) 
+
+library(car)
+
+```
+
+```{r}
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data_raw <- read_csv(url)
+```
+
+
+```{r}
+anyNA(mta_data_raw)
+any(sapply(mta_data_raw, function(x) any(x=="")))
+any(sapply(mta_data_raw, function(x) any(x == -999)))
+```
+
+
+```{r}
+df <- mta_data_raw %>%
+  mutate(Date = mdy(Date)) %>%
+  mutate(across(where(is.character), ~ na_if(., "missing"))) %>%
+  mutate(across(where(is.numeric), ~ na_if(., -999))) %>%
+  mutate(across(where(is.character), ~ na_if(., ""))) %>% 
+  na.omit()
+
+head(df)
+```
+
+
+```{r}
+# Polynomial (squared) terms for selected numeric predictors 
+dfpoly <- df %>% 
+  mutate( 
+    traffic_sq = `Bridges and Tunnels: Total Traffic`^2, 
+    buses_sq = `Buses: Total Estimated Ridership`^2, 
+    lirr_sq = `LIRR: Total Estimated Ridership`^2, 
+    mn_sq = `Metro-North: Total Estimated Ridership`^2, 
+    aar_sq = `Access-A-Ride: Total Scheduled Trips`^2, 
+    sir_sq = `Staten Island Railway: Total Estimated Ridership`^2 
+  ) 
+
+```
+
+
+```{r}
+# The full model with all potential predictors and their squares 
+full_model <- lm(`Subways: Total Estimated Ridership` ~  
+                   `Bridges and Tunnels: Total Traffic` + traffic_sq + 
+                   `Buses: Total Estimated Ridership` + buses_sq + 
+                   `LIRR: Total Estimated Ridership` + lirr_sq + 
+                   `Metro-North: Total Estimated Ridership` + mn_sq + 
+                   `Access-A-Ride: Total Scheduled Trips` + aar_sq +   
+                   `Staten Island Railway: Total Estimated Ridership`+sir_sq, 
+                 data = dfpoly) 
+
+```
+
+
+```{r}
+# Stepwise selection (both directions) 
+step_model <- stepAIC(full_model, direction = "both", trace = TRUE) 
+ 
+ # Review of the selected model 
+summary(step_model) 
+ # Checking multicollinearity 
+vif(step_model) 
+ model_final <- lm(`Subways: Total Estimated Ridership` ~  
+  `Bridges and Tunnels: Total Traffic` + 
+  `Buses: Total Estimated Ridership` +  
+  buses_sq +  
+  `LIRR: Total Estimated Ridership` +  
+  lirr_sq +  
+  `Metro-North: Total Estimated Ridership` +  
+  `Access-A-Ride: Total Scheduled Trips` +  
+  aar_sq +  
+  sir_sq, 
+  data = dfpoly) 
+
+```
+
+
+```{r}
+# Stepwise selection (both directions) 
+step_model <- stepAIC(full_model, direction = "both", trace = TRUE) 
+ 
+
+```
+
+
+```{r}
+# Review of the selected model 
+summary(step_model) 
+```
+
+
+```{r}
+# Checking multicollinearity 
+vif(step_model) 
+ model_final <- lm(`Subways: Total Estimated Ridership` ~  
+  `Bridges and Tunnels: Total Traffic` + 
+  `Buses: Total Estimated Ridership` +  
+  buses_sq +  
+  `LIRR: Total Estimated Ridership` +  
+  lirr_sq +  
+  `Metro-North: Total Estimated Ridership` +  
+  `Access-A-Ride: Total Scheduled Trips` +  
+  aar_sq +  
+  sir_sq, 
+  data = dfpoly) 
+```
+
+
+# J-La Code for QDA
+
+```{r}
+### combining ridership 
+df$total_ridership <- (df$`Subways: Total Estimated Ridership`+
+                         df$`Buses: Total Estimated Ridership`+
+                         df$`LIRR: Total Estimated Ridership`+
+                         df$`Metro-North: Total Estimated Ridership`+
+                         df$`Staten Island Railway: Total Estimated Ridership`)
+```
+
+
+```{r}
+quantiles <- quantile(df$total_ridership, probs = c(0.33, 0.66))
+
+df$total_ridership_level <- cut(
+  df$total_ridership,
+  breaks = c(-Inf, quantiles[1], quantiles[2], Inf),
+  labels = c("Low", "Average", "High")
+)
+```
+
+
+```{r}
+predictors <- c(
+  "Subways: % of Comparable Pre-Pandemic Day",
+  "Buses: % of Comparable Pre-Pandemic Day",
+  "LIRR: % of Comparable Pre-Pandemic Day",
+  "Metro-North: % of Comparable Pre-Pandemic Day",
+  "Access-A-Ride: % of Comparable Pre-Pandemic Day",
+  "Bridges and Tunnels: % of Comparable Pre-Pandemic Day",
+  "Staten Island Railway: % of Comparable Pre-Pandemic Day"
+)
+```
+
+
+
+```{r}
+df_class <- na.omit(df[, c(predictors, "total_ridership_level")])
+
+set.seed(1234)
+
+Z = sample(nrow(df_class), .5*nrow(df_class))
+
+train_df <- df_class[Z, ]
+test_df <- df_class[-Z, ]
+
+
+qda_model <- qda(total_ridership_level ~ ., data = train_df)
+
+
+qda_pred <- predict(qda_model, test_df)
+
+
+conf_matx_qda <- table(Predicted = qda_pred$class, Actual = test_df$total_ridership_level)
+conf_matx_qda
+
+
+accuracy_qda <- sum(diag(conf_matx_qda)) / sum(conf_matx_qda)
+accuracy_qda
+```
+
+
+```{r}
+set.seed(1234)
+
+k <- 10
+folds <- sample(rep(1:k, length.out = nrow(df_class)))
+cv_accuracies <- numeric(k)
+
+levels <- levels(df_class$total_ridership_level)
+overall_conf_matx <- matrix(0, nrow = 3, ncol = 3, dimnames = list(Predicted = levels, Actual = levels))
+
+for (i in 1:k) {
+  test_idx <- which(folds == i)
+  train_data <- df_knn[-test_idx, ]
+  test_data <- df_knn[test_idx, ]
+  
+  cv_qda_model <- qda(total_ridership_level ~ ., data = train_data)
+  predictions <- predict(cv_qda_model, test_data)$class
+  
+  cv_conf_matx <- table(factor(predictions, levels = levels),
+                        factor(test_data$total_ridership_level, levels = levels))
+  
+  overall_conf_matx <- overall_conf_matx + cv_conf_matx
+  cv_accuracies[i] <- sum(diag(cv_conf_matx)) / sum(cv_conf_matx)
+}
+
+overall_conf_matx
+mean(cv_accuracies)
+```
+
