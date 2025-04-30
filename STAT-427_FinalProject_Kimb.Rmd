@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+#git link: https://github.com/verbiage/STAT-427_GroupProject.git
+
+```
+
 ```{r pressure, echo=FALSE, message=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -35,6 +40,7 @@ library(car)
 directory_path <- "C:/Users/jkimb/OneDrive/Desktop/School/Classes/VII. Spring 2025 (LAST SEM BABY)/ONL_STAT-427_StatisticalMachineLearning/Projects"
 
 setwd(directory_path)
+
 ```
 
 ```{r}
@@ -145,9 +151,97 @@ correlation_results <- df %>%
 print(correlation_results)
 ```
 
+cor(df$`Subways: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.645984
+### Moderate positive correlation. As subway ridership returns to pre-pandimc levels, total subway ridership tends to increase. 
+
+> cor(df$`Buses: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+[1] 0.8837609
+
+### Strong postive correlation. Higher bus ridership seems strongly associated with higher subway ridership. 
+
+> cor(df$`Buses: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.6396882
+
+### Moderate positive correlation. When bus ridership returns to pre-pandemic levels, subway ridership also tends to be higher.
+
+> cor(df$`LIRR: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+[1] 0.9610828
+
+### A very strong positive correlation. LIRR ridership and subway ridership seem strongly associated with each other. 
+
+> cor(df$`LIRR: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.4087246
+
+### A weak, but positive correlation. As LIRR ridership returns to pre-pandemic levels, it doesn't appear to affect Subway total estimated ridership significantly.
+
+> cor(df$`Metro-North: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+[1] 0.9426142
+
+### A strong positive correlation. Metro-north ridership and subway ridership seem strongly associated with each other. 
+
+> cor(df$`Metro-North: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.6010156
+
+### Moderate positive correlation. As Metro-north ridership returns to pre-pandemic levels, it somewhat tracks with subway usage.
+
+> cor(df$`Access-A-Ride: Total Scheduled Trips`, df$`Subways: Total Estimated Ridership`)
+[1] 0.9088294
+
+### A strong positive correlation. Access-A-Ride trips and subway ridership seem strongly associated with each other. 
+
+> cor(df$`Access-A-Ride: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.7061747
+
+### Moderately positive correlation. As Access-A-Ride usage returns to pre-pandemic levels, total subway ridership tends to increase.
+
+> cor(df$`Bridges and Tunnels: Total Traffic`, df$`Subways: Total Estimated Ridership`)
+[1] 0.7381719
+
+### Moderately positive correlation. Higher vehicle traffic seems associated with higher subway ridership.
+
+> cor(df$`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.6586184
+
+### Moderately positive correlation. As Bridge and Tunnel traffic returns to pre-pandemic levels, total subway ridership seems to somewhat increase.
+
+> cor(df$`Staten Island Railway: Total Estimated Ridership`, df$`Subways: Total Estimated Ridership`)
+[1] 0.9233413
+
+### A strong positive correlation. Staten Island Railway and Subway ridership seem strongly associated with each other. 
+
+> cor(df$`Staten Island Railway: % of Comparable Pre-Pandemic Day`, df$`Subways: Total Estimated Ridership`)
+[1] 0.4692073
+
+### A weak, but positive correlation. As SIR ridership returns to pre-pandemic levels, it doesn't appear to affect Subway total estimated ridership significantly. 
+
+
+
+# Data Summary Table
+```{r}
+df_with_year <- df %>%
+  mutate(Year = year(Date))
+
+ridership_summary <- df_with_year %>%
+  group_by(Year) %>%
+  summarize(
+    Total_Subway_Ridership = sum(`Subways: Total Estimated Ridership`, na.rm = TRUE),
+    Total_Bus_Ridership = sum(`Buses: Total Estimated Ridership`, na.rm = TRUE),
+    Total_LIRR_Ridership = sum(`LIRR: Total Estimated Ridership`, na.rm = TRUE),
+    Total_MNR_Ridership = sum(`Metro-North: Total Estimated Ridership`, na.rm = TRUE),
+    Total_SIR_Ridership = sum(`Staten Island Railway: Total Estimated Ridership`, na.rm = TRUE),
+    Total_AAR_Ridership =sum(`Access-A-Ride: Total Scheduled Trips`, na.rm = TRUE),
+  ) %>%
+  filter(Year != 2025)
+
+
+print(ridership_summary)
+```
+
+
 # Regression Question
 
-## Can we predict total estimated subway ridership based on pandemic/post-pandemic trends and while considering external factors such as economic indicators?
+## Updated - What type of regression model best predicts total daily subway ridership?
 
 ## --- Multiple Linear Regression ---
 
@@ -179,15 +273,18 @@ plot(reduced_model)
 ```{r}
 step(reduced_model)
 ```
+### Best to not drop any variables - dropping them only increases AIC. 
 
 ```{r}
 anova(full_model, reduced_model)
 ```
+### Reduced model actually worsened statistically. So, keeping full model performs better. 
 
 ```{r}
 vif_full <- vif(full_model)
 vif_full
 ```
+### Some multicollinearity was detected, especially with `LIRR Total Estimated Ridership` having the highest vif. 
 
 ```{r}
 predicted_full <- predict(full_model, df)
@@ -200,6 +297,7 @@ rmse_full
 mse_full <- (mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
 mse_full
 ```
+### The RMSE shows that there is an average daily prediction error of approximately 78,900 riders.
 
 ```{r}
 set.seed(1234)
@@ -229,10 +327,9 @@ plot(actual, predicted,
 abline(a = 0, b = 1, col = "red", lwd = 2)
 ```
 
-
 # Classification Question
 
-## Can we categorize daily ridership levels as “low,” “average,” or “high” based on total ridership numbers?
+## Updated - Can predict “low,” “average,” or “high” ridership by using classification statistical learning methods?
 
 
 ```{r}
