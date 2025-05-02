@@ -289,7 +289,7 @@ print(paste("Average QDA Accuracy from Cross-Validation:", round(avg_accuracy * 
 
 
 ```{r}
-"Since she decided to leave our group, we thought we show her code versions vs our code for the same tasks (that she was originally assigned) - here our are results"
+"Since she decided to leave our group, we thought we show her code versions (with our notes for them) vs our code for the same tasks (that she was originally assigned), here our are results!"
 ```
 
 
