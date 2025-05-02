@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r pressure, echo=FALSE, message=FALSE}
+```{r pressure, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(lubridate)
 library(dbplyr)
@@ -745,8 +745,8 @@ The Random Forest's high accuracy rate (93.22%) gives us a lot of confidence in 
 Finally, the insights from the feature importance analysis can help guide bigger policy decisions. Knowing which modes of transit have the strongest ties to subway ridership could support more integrated planning and investment strategies across the system. For instance, encouraging commuter rail use might have predictable ripple effects on subway demand."
 ```
 
+# combined regression plot
 ```{r}
-#combined regression plot
 response_var <- "Subways: Total Estimated Ridership"
 predictor_vars <- c("Buses: Total Estimated Ridership", 
                     "LIRR: Total Estimated Ridership", 
