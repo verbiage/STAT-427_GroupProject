@@ -1,5 +1,5 @@
 ---
-title: "LEIGHCUMMINGS_STAT-427_FinalProjectContribution-with-CodeComparison"
+title: "LEIGHCUMMINGS_STAT-427_FinalProjectContribution-with-GroupCodeComparison"
 author: "J.Kimbrough and K. Rodriguez"
 date: "2025-04-30"
 output: html_document
@@ -176,7 +176,7 @@ ggplot(mta_data, aes(x = Day_Num, y = Day_Num2, color = Ridership_Level)) +
 ```
 
 
-## HER REVISED CODE
+## HER REVISED CODE, supposedly (JKimb)
 
 ```{r}
 #had to add dplyr:: before select - for her code to run (JKimb)
@@ -289,7 +289,7 @@ print(paste("Average QDA Accuracy from Cross-Validation:", round(avg_accuracy * 
 
 
 ```{r}
-"We did her portion, since she decided to leave our group - these were our results"
+"Since she decided to leave our group, we thought we show her code versions vs our code for the same tasks (that she was originally assigned) - here our are results"
 ```
 
 
