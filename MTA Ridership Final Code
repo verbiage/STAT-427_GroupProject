@@ -1,0 +1,817 @@
+---
+title: "MTA Ridership Final Project
+author: "J.Kimbrough, Kennedy Rodriguez"
+date: "2025-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r pressure, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(readr)
+library(RSQLite)
+library(ggthemes)
+library(ggplot2)
+library(class)
+library(caret)
+library(glmnet)
+library(ISLR2)
+library(MASS)
+library(boot)
+library(tree)
+library(randomForest)
+library(splines)
+library(rpart)
+library(rpart.plot)  
+library(car)
+library(gridExtra)
+library(Metrics)
+```
+
+
+```{r}
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+mta_data_raw <- read_csv(url)
+view(mta_data_raw)
+glimpse(mta_data_raw)
+```
+
+
+# ---- Cleaning Data -----
+
+```{r}
+anyNA(mta_data_raw)
+any(sapply(mta_data_raw, function(x) any(x=="")))
+any(sapply(mta_data_raw, function(x) any(x == -999)))
+```
+
+```{r}
+df <- mta_data_raw %>%
+  mutate(Date = mdy(Date)) %>%
+  mutate(across(where(is.character), ~ na_if(., "missing"))) %>%
+  mutate(across(where(is.numeric), ~ na_if(., -999))) %>%
+  mutate(across(where(is.character), ~ na_if(., ""))) %>% 
+  na.omit()
+
+head(df)
+```
+
+
+# --- Exploratory Data Analysis ---
+
+```{r}
+colnames(df)
+```
+
+# Histograms
+```{r}
+df_long <- df %>%
+   dplyr::select(`Subways: Total Estimated Ridership`,
+         `Buses: Total Estimated Ridership`,
+         `LIRR: Total Estimated Ridership`,
+         `Metro-North: Total Estimated Ridership`,
+         `Staten Island Railway: Total Estimated Ridership`) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Transportation_Mode",
+               values_to = "Ridership")
+
+ggplot(df_long, aes(x = Ridership)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Transportation_Mode, scales = "free_x") +
+  labs(title = "Distribution of Ridership by Transportation Mode",
+       x = "Total Estimated Ridership",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+# Plotted Relationships
+```{r}
+
+df_long <- df %>%
+   dplyr::select(
+    `Subways: % of Comparable Pre-Pandemic Day`,
+    `Buses: Total Estimated Ridership`,
+    `LIRR: Total Estimated Ridership`,
+    `Metro-North: Total Estimated Ridership`,
+    `Access-A-Ride: Total Scheduled Trips`,
+    `Bridges and Tunnels: Total Traffic`,
+    `Staten Island Railway: Total Estimated Ridership`,
+    `Subways: Total Estimated Ridership`
+  ) %>%
+  pivot_longer(
+    cols = -`Subways: Total Estimated Ridership`,
+    names_to = "Other_Metric",
+    values_to = "Other_Value"
+  )
+
+ggplot(df_long, aes(x = Other_Value, y = `Subways: Total Estimated Ridership`)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ Other_Metric, scales = "free", ncol = 2) + # Removed the extra + before the comment
+  labs(
+    title = "Subway Ridership vs. Other Transportation Metrics",
+    x = "Other Transportation Metric",
+    y = "Subway Total Estimated Ridership"
+  ) +
+  theme_minimal()
+```
+
+
+
+
+# Correlations
+```{r}
+numeric_cols <- names(df)[sapply(df, is.numeric) & names(df) != "Subways: Total Estimated Ridership"]
+
+correlation_results <- df %>%
+  dplyr::select(-Date) %>% # Ensure Date is removed
+  pivot_longer(
+    cols = all_of(numeric_cols),
+    names_to = "Other_Metric",
+    values_to = "Other_Value"
+  ) %>%
+  group_by(Other_Metric) %>%
+  summarize(
+    correlation = cor(`Subways: Total Estimated Ridership`, Other_Value, use = "pairwise.complete.obs")
+  )
+
+print(correlation_results)
+```
+
+```{r}
+"Buses: Total Estimated Ridership
+The correlation coefficient between bus ridership and subway ridership is 0.88, indicating a strong positive correlation. This suggests that when more people ride the bus, subway ridership tends to be higher as well. The two systems may serve as complements or be influenced by similar demand patterns.
+
+Buses: % of Comparable Pre-Pandemic Day
+The correlation here is 0.64, showing a moderate positive relationship. As bus ridership returns to its pre-pandemic baseline, subway ridership also tends to increase, though not as strongly as with total bus numbers.
+
+LIRR: Total Estimated Ridership
+With a very high correlation of 0.96, this represents a very strong positive relationship. It indicates that Long Island Rail Road ridership is highly synchronized with subway usage, likely due to intermodal transfers and similar commuter patterns.
+
+LIRR: % of Comparable Pre-Pandemic Day
+The correlation is 0.41, which is weakly positive. This suggests that while total LIRR ridership is strongly associated with subway use, the pace of recovery relative to pre-pandemic levels is not as tightly linked.
+
+Metro-North: Total Estimated Ridership
+The coefficient is 0.94, indicating another very strong positive correlation. Like the LIRR, Metro-North ridership appears to rise and fall in tandem with subway ridership.
+
+Metro-North: % of Comparable Pre-Pandemic Day
+This yields a moderate positive correlation of 0.60. Similar to LIRR trends, total ridership aligns more closely with subway usage than the relative recovery percentage does.
+
+Access-A-Ride: Total Scheduled Trips
+A correlation of 0.91 suggests a strong positive relationship. This implies that when more paratransit trips are scheduled, subway ridership also increases, possibly reflecting broader patterns of urban mobility and accessibility.
+
+Access-A-Ride: % of Comparable Pre-Pandemic Day
+The coefficient is 0.71, still a moderately strong correlation. As Access-A-Ride approaches pre-pandemic service levels, subway usage tends to rise, though again with less intensity than total trip counts.
+
+Bridges and Tunnels: Total Traffic
+The correlation of 0.74 shows a moderate positive relationship between road traffic and subway ridership. This may reflect general increases in overall mobility within the region.
+
+Bridges and Tunnels: % of Comparable Pre-Pandemic Day
+At 0.66, this remains a moderate positive correlation, implying that as bridge and tunnel traffic returns to normal, subway ridership also tends to rise.
+
+Staten Island Railway: Total Estimated Ridership
+This yields a strong positive correlation of 0.92. Subway and Staten Island Railway usage appear closely linked, likely due to the ferry and rail connections to the main subway system.
+
+Staten Island Railway: % of Comparable Pre-Pandemic Day
+The correlation is 0.47, which is weak but positive. Again, while absolute ridership levels align well, the recovery pace doesn't strongly predict subway usage.
+
+Summary
+Overall, total ridership figures for other transportation modes tend to have stronger correlations with subway usage than their percentages of pre-pandemic levels. This suggests that actual volume of riders is a more reliable indicator of subway demand than recovery benchmarks alone. Commuter rail lines (LIRR and Metro-North) and Access-A-Ride show particularly high associations with subway usage, pointing to potential interdependencies in how New Yorkers use different MTA services."
+```
+
+
+
+# Data Summary Table
+```{r}
+df_with_year <- df %>%
+  mutate(Year = year(Date))
+
+ridership_summary <- df_with_year %>%
+  group_by(Year) %>%
+  summarize(
+    Total_Subway_Ridership = sum(`Subways: Total Estimated Ridership`, na.rm = TRUE),
+    Total_Bus_Ridership = sum(`Buses: Total Estimated Ridership`, na.rm = TRUE),
+    Total_LIRR_Ridership = sum(`LIRR: Total Estimated Ridership`, na.rm = TRUE),
+    Total_MNR_Ridership = sum(`Metro-North: Total Estimated Ridership`, na.rm = TRUE),
+    Total_SIR_Ridership = sum(`Staten Island Railway: Total Estimated Ridership`, na.rm = TRUE),
+    Total_AAR_Ridership =sum(`Access-A-Ride: Total Scheduled Trips`, na.rm = TRUE),
+  ) %>%
+  filter(Year != 2025)
+
+
+print(ridership_summary)
+```
+
+
+# Regression Question
+
+## Updated - What type of regression model best predicts total daily subway ridership?
+
+## --- Multiple Linear Regression ---
+
+```{r}
+# Subways: Total Estimated Ridership
+
+full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
+
+summary(full_model)
+```
+### The model explains about 99.45% of the variability in subway ridership, which is extremely high. With an F-stat of 22,890 and a p-value < 2.2e-16, the overall model is highly statistically significant.
+
+```{r}
+plot(full_model)
+```
+
+
+```{r}
+#NO Date, Bridges and Tunnels: % of Comparable Pre-Pandemic Day
+reduced_model <- lm(`Subways: Total Estimated Ridership` ~ . -Date -`Bridges and Tunnels: % of Comparable Pre-Pandemic Day`, data = df)
+summary(reduced_model)
+```
+### This model still explains about 99.45% of the variability in subway ridership, which is extremely high. The F-stat is still pretty high at 26,630 and a low p-value. The overall model is still statistically significant.
+
+```{r}
+plot(reduced_model)
+```
+
+```{r}
+step(reduced_model)
+```
+### Best to not drop any variables - dropping them only increases AIC. 
+
+```{r}
+anova(full_model, reduced_model)
+```
+### Reduced model actually worsened statistically. So, keeping full model performs better. 
+
+```{r}
+vif_full <- vif(full_model)
+vif_full
+```
+### Some multicollinearity was detected, especially with `LIRR Total Estimated Ridership` having the highest vif. 
+
+```{r}
+predicted_full <- predict(full_model, df)
+
+rmse_full <- sqrt(mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
+rmse_full
+```
+
+```{r}
+mse_full <- (mean((df$`Subways: Total Estimated Ridership` - predicted_full)^2))
+mse_full
+```
+### The RMSE shows that there is an average daily prediction error of approximately 78,900 riders.
+
+```{r}
+set.seed(1234)
+train_control <- trainControl(method = "cv", number = 10)
+
+model_cv <- train(
+  `Subways: Total Estimated Ridership` ~ .,
+  data = df,
+  method = "lm",
+  trControl = train_control
+)
+
+print(model_cv)
+```
+### Similar to predicted RMSE for the full model, the cross-validated RMSE shows that there is an average daily prediction error of approximately 80,000 riders. The R^2 is very high, and suggests that the model explains over 99% of the variability in subway ridership. 
+
+```{r}
+options(scipen = 999)
+actual <- df$`Subways: Total Estimated Ridership`
+predicted <- predicted_full
+
+plot(actual, predicted,
+     xlab = "Actual Subway Ridership (Billions)",
+     ylab = "Predicted Subway Ridership (Billions)",
+     main = "Predicted vs. Actual Subway Ridership",
+     pch = 19, col = "steelblue")
+abline(a = 0, b = 1, col = "red", lwd = 2)
+```
+
+# Classification Question
+
+## Updated - Can predict “low,” “average,” or “high” ridership by using classification statistical learning methods?
+
+
+```{r}
+### combining ridership 
+df$total_ridership <- (df$`Subways: Total Estimated Ridership`+
+                         df$`Buses: Total Estimated Ridership`+
+                         df$`LIRR: Total Estimated Ridership`+
+                         df$`Metro-North: Total Estimated Ridership`+
+                         df$`Staten Island Railway: Total Estimated Ridership`)
+```
+
+```{r}
+
+quantiles <- quantile(df$total_ridership, probs = c(0.33, 0.66))
+
+df$total_ridership_level <- cut(
+  df$total_ridership,
+  breaks = c(-Inf, quantiles[1], quantiles[2], Inf),
+  labels = c("Low", "Average", "High")
+)
+```
+
+```{r}
+predictors <- c(
+  "Subways: % of Comparable Pre-Pandemic Day",
+  "Buses: % of Comparable Pre-Pandemic Day",
+  "LIRR: % of Comparable Pre-Pandemic Day",
+  "Metro-North: % of Comparable Pre-Pandemic Day",
+  "Access-A-Ride: % of Comparable Pre-Pandemic Day",
+  "Bridges and Tunnels: % of Comparable Pre-Pandemic Day",
+  "Staten Island Railway: % of Comparable Pre-Pandemic Day"
+)
+```
+
+
+
+## ---- KNN ---- 
+```{r}
+df_knn <- na.omit(df[, c(predictors, "total_ridership_level")])
+
+```
+
+# Because KNN is distance-based it could be good to standardize predictors by scaling them, such as
+# df_knn_scaled <- df_knn %>%
+#  mutate(across(all_of(predictors), scale))
+
+
+```{r}
+set.seed(1234)
+
+Z = sample(nrow(df_knn), .5*nrow(df_knn))
+
+train = df_knn[Z, predictors]
+
+test = df_knn[-Z, predictors]
+
+cl = df_knn$total_ridership_level[Z]
+test_cl = df_knn$total_ridership_level[-Z]
+
+```
+
+```{r}
+Yhat <- knn(train, test, cl, k = 3)
+```
+
+```{r}
+conf_matx <- table(Predicted = Yhat, Actual = test_cl)
+conf_matx 
+```
+
+```{r}
+accuracy <- sum(diag(conf_matx)) / sum(conf_matx)
+accuracy
+```
+
+### Errors mostly happen around the Low v Average and Average v High boundary. Pretty high accuracy. 
+
+
+```{r}
+class_rates <- numeric(100)
+
+for(k in 1:100){
+  Yhat_k <- knn(train, test, cl, k = k)
+  
+  conf_matx_k <- table(Predicted = Yhat_k, Actual = test_cl)
+  
+  class_rates[k] <- sum(diag(conf_matx_k)) / sum(conf_matx_k)
+}
+```
+
+```{r}
+best_k <- which.max(class_rates)
+best_k
+```
+### k = 1 performed the best but this could be indicative that the model may be overfitting. 
+
+```{r}
+#Kennedy's comment
+"I think there could be some potential overfitting of the training data implied by best_k = 1. The model might be learning the noise and specific details of the training set rather than the underlying generalizable patterns and i think this will probably lead to poor performance on new, unseen data. A k=1 model is highly sensitive to outliers
+
+Even if the cross-validation accuracy was high with k=1, it's still susceptible to overfitting, especially if the dataset has noise or outliers. I have done previous projects with KNN before where I get low k values and high accuracy, when those two combine whether or not the model is acceptable will depend on the project's context."
+```
+
+```{r}
+plot(1:100, class_rates, type = "b", pch = 19, col = "blue",
+     xlab = "K Value", ylab = "Classification Accuracy")
+
+abline(v = best_k, col = "red", lty = 3)
+```
+# Kennedy's
+
+```{r}
+
+url <- "https://data.ny.gov/api/views/vxuj-8kew/rows.csv?accessType=DOWNLOAD"
+df<- read_csv(url)
+options(scipen = 999)
+```
+
+## Preparing Data: Regression Section
+```{r}
+response_var <- "Subways: Total Estimated Ridership"
+predictor_vars <- c("Buses: Total Estimated Ridership", 
+                    "LIRR: Total Estimated Ridership", 
+                    "Metro-North: Total Estimated Ridership",
+                    "Access-A-Ride: Total Scheduled Trips", 
+                    "Bridges and Tunnels: Total Traffic", 
+                    "Staten Island Railway: Total Estimated Ridership")
+
+df_clean <- na.omit(df[, c(response_var, predictor_vars)])
+
+# Create matrices
+x <- as.matrix(df_clean[, predictor_vars])
+y <- df_clean[[response_var]]
+
+# Train/Test Split
+set.seed(168)
+train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
+x_train <- x[train_indices, ]
+y_train <- y[train_indices]
+x_test  <- x[-train_indices, ]
+y_test  <- y[-train_indices]
+
+```
+
+## Ridge and Lasso Regression
+```{r}
+# Ridge
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
+ridge_mse <- mean((ridge_pred - y_test)^2)
+
+# Lasso
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
+lasso_mse <- mean((lasso_pred - y_test)^2)
+
+ridge_r2 <- 1 - sum((y_test - ridge_pred)^2) / sum((y_test - mean(y_test))^2)
+ridge_rmse <- sqrt(mean((y_test - ridge_pred)^2)) # Calculate RMSE directly
+
+lasso_r2 <- 1 - sum((y_test - lasso_pred)^2) / sum((y_test - mean(y_test))^2)
+lasso_rmse <- sqrt(mean((y_test - lasso_pred)^2)) # Calculate RMSE directly
+
+
+model_summary <- data.frame(
+  Model = c("Ridge", "Lasso"),
+  R_squared = c(ridge_r2, lasso_r2),
+  RMSE = c(ridge_rmse, lasso_rmse),
+  MSE = c(ridge_mse, lasso_mse) # Add MSE to the data frame
+)
+
+print(model_summary)
+```
+
+## Ridge vs Lasso: Predicted vs Actual Plot
+```{r}
+# Plotting
+ridge_plot_df <- data.frame(Actual = y_test, Predicted = as.numeric(ridge_pred), Model = "Ridge")
+lasso_plot_df <- data.frame(Actual = y_test, Predicted = as.numeric(lasso_pred), Model = "Lasso")
+all_predictions_df <- rbind(ridge_plot_df, lasso_plot_df)
+
+ggplot(all_predictions_df, aes(x = Actual, y = Predicted, color = Model)) +
+  geom_point(alpha = 0.7) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
+  labs(
+    title = "Predicted vs Actual Subway Ridership",
+    x = "Actual Ridership",
+    y = "Predicted Ridership",
+    color = "Model"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r}
+# This predicted vs actual subway ridership plot indicates that our Ridge and Lasso regression models are performing reasonably well in predicting subway ridership based on the other transportation metrics.
+
+# Comparing our MSE, we can see that the Lasso regression model has a slightly lower Mean Squared Error than the Ridge regression model on our test data. A lower MSE indicates that, on average, the predictions made by the Lasso model are closer to the actual subway ridership values in the test set compared to the Ridge model. The difference in MSE, while present, might not be drastically large. It suggests that Lasso has a marginal improvement in predictive accuracy for this specific dataset and the chosen model parameters.
+```
+
+
+## Ridge/Lasso CV Plots
+```{r}
+# Create data frames for ridge and lasso
+ridge_df <- data.frame(
+  log_lambda = log(ridge_model$lambda),
+  mse_mean = ridge_model$cvm,
+  mse_upper = ridge_model$cvup,
+  mse_lower = ridge_model$cvlo
+)
+
+lasso_df <- data.frame(
+  log_lambda = log(lasso_model$lambda),
+  mse_mean = lasso_model$cvm,
+  mse_upper = lasso_model$cvup,
+  mse_lower = lasso_model$cvlo
+)
+
+ridge_df <- ridge_df %>% mutate(across(c(mse_mean, mse_upper, mse_lower), ~ .x / 1e9))
+lasso_df <- lasso_df %>% mutate(across(c(mse_mean, mse_upper, mse_lower), ~ .x / 1e9))
+
+# Ridge plot
+ridge_plot <- ggplot(ridge_df, aes(x = log_lambda, y = mse_mean)) +
+  geom_point(color = "red", size = 2) +
+  geom_errorbar(aes(ymin = mse_lower, ymax = mse_upper), width = 0.05, color = "gray") +
+  labs(title = "Ridge: CV MSE vs Lambda", 
+       x = expression(log(lambda)), 
+       y = "Mean-Squared Error (Billions)") +
+  scale_y_continuous(labels = scales::comma) +  # <-- nice labels: 0, 200, 400
+  theme_minimal(base_size = 14) # slightly larger base font
+
+# Lasso plot
+lasso_plot <- ggplot(lasso_df, aes(x = log_lambda, y = mse_mean)) +
+  geom_point(color = "red", size = 2) +
+  geom_errorbar(aes(ymin = mse_lower, ymax = mse_upper), width = 0.05, color = "gray") +
+  labs(title = "Lasso: CV MSE vs Lambda", 
+       x = expression(log(lambda)), 
+       y = "Mean-Squared Error (Billions)") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal(base_size = 14)
+
+grid.arrange(ridge_plot, lasso_plot, ncol = 2)
+
+
+```
+
+```{r}
+"Ridge: 'Hockey stick' MSE curve vs. log(λ), low MSE at low λ (overfitting), increases with regularization (underfitting), plateaus at high λ. Optimal λ suggests moderate regularization prevents overfitting. Small error bars indicate consistent CV performance. Minimum MSE in lower tens of billions.
+
+Lasso: MSE increases with log(λ) from minimum, potentially steeper than Ridge. Optimal λ lower, suggesting less regularization needed. Small error bars. Minimum MSE in lower tens of billions, possibly slightly better than Ridge.
+
+Comparison: Similar minimum MSE for both (billions indicate substantial unexplained variance). Lasso prefers less regularization, implying potential feature selection of less influential predictors, offering insight into key factors. Both handle multicollinearity. Lasso's slight edge hints at removing less relevant variables."
+```
+
+
+## Classification: Decision Tree and Random Forest
+
+```{r}
+# Creating categorical target variable
+quantiles <- quantile(df_clean[[response_var]], probs = c(0.33, 0.66))
+df_clean$ridership_class <- cut(df_clean[[response_var]],
+                                breaks = c(-Inf, quantiles, Inf),
+                                labels = c("Low", "Medium", "High"),
+                                right = TRUE)
+
+# Class distribution
+table(df_clean$ridership_class)
+
+
+```
+
+```{r}
+# Train/Test split for classification
+set.seed(168)
+train_index <- createDataPartition(df_clean$ridership_class, p = 0.8, list = FALSE)
+
+train_data <- df_clean[train_index, ]
+test_data  <- df_clean[-train_index, ]
+
+# Clean column names (no colons/spaces)
+train_data_clean <- train_data %>%
+  rename_with(~ gsub("[^[:alnum:]_]", "_", .))
+
+test_data_clean <- test_data %>%
+  rename_with(~ gsub("[^[:alnum:]_]", "_", .))
+
+```
+
+## Training Decision Tree
+```{r}
+tree_model <- rpart(ridership_class ~ Buses__Total_Estimated_Ridership +
+                                    LIRR__Total_Estimated_Ridership +
+                                    Metro_North__Total_Estimated_Ridership +
+                                    Access_A_Ride__Total_Scheduled_Trips +
+                                    Bridges_and_Tunnels__Total_Traffic +
+                                    Staten_Island_Railway__Total_Estimated_Ridership,
+                    data = train_data_clean,
+                    method = "class",
+                    control = rpart.control(maxdepth = 5, minsplit = 30))
+
+# Checking the complexity parameter to prune
+printcp(tree_model)
+
+
+# Pruning
+pruned_tree <- prune(tree_model, cp = tree_model$cptable[which.min(tree_model$cptable[,"xerror"]),"CP"])
+
+rpart.plot(pruned_tree, type = 2, extra = 104, fallen.leaves = TRUE)
+
+
+```
+
+
+```{r}
+"The decision tree classifies daily subway ridership (low, average, high) using other MTA services' ridership. LIRR, Metro-North, Access-A-Ride, and Staten Island Railway ridership were key predictors, suggesting interconnected demand. Surprisingly, bus ridership and bridge/tunnel traffic were not significant in this model. The initial guessing error was high (66%), highlighting the model's value. By pruning the tree using cross-validation error, we aim for a model that accurately classifies future subway ridership based on these relationships. The tree's rules offer insights into how demand across different transit modes interacts, which can inform future, integrated transportation policies and service planning."
+```
+
+
+## Train Random Forest
+```{r}
+rf_model <- randomForest(ridership_class ~ Buses__Total_Estimated_Ridership +
+                                          LIRR__Total_Estimated_Ridership +
+                                          Metro_North__Total_Estimated_Ridership +
+                                          Access_A_Ride__Total_Scheduled_Trips +
+                                          Bridges_and_Tunnels__Total_Traffic +
+                                          Staten_Island_Railway__Total_Estimated_Ridership,
+                         data = train_data_clean,
+                         ntree = 500,
+                         importance = TRUE)
+
+print(rf_model)
+
+```
+
+## Evaluating Tree and RF
+```{r}
+tree_pred <- predict(tree_model, test_data_clean, type = "class")
+rf_pred   <- predict(rf_model, test_data_clean)
+
+# Confusion Matrices
+cat("Decision Tree Confusion Matrix:\n")
+print(confusionMatrix(tree_pred, test_data_clean$ridership_class))
+
+cat("\nRandom Forest Confusion Matrix:\n")
+print(confusionMatrix(rf_pred, test_data_clean$ridership_class))
+
+```
+
+
+```{r}
+"Overall Accuracy: Random Forest achieves a higher accuracy (93.22%) compared to the Decision Tree (89.27%), indicating a greater ability to correctly classify ridership levels.
+
+Kappa Statistic: Random Forest has a substantially higher Kappa (0.8983 vs. 0.839), suggesting better agreement between predicted and actual classifications beyond chance.
+
+Sensitivity (Recall): While the sensitivity for the 'Low' class is similar for both, Random Forest shows higher sensitivity for 'Medium' (91.45% vs. 85.47%) and 'High' (93.33% vs. 87.50%) ridership, meaning it's better at correctly identifying these categories.
+
+Specificity: Random Forest exhibits higher specificity across all classes, particularly for 'Low' (98.73% vs. 95.36%) and 'Medium' (94.09% vs. 91.14%), indicating a better ability to correctly identify days that do not belong to each ridership level.
+
+Positive Predictive Value (Precision): Random Forest has a higher precision for 'Low' (97.37% vs. 90.98%) and 'Medium' (88.43% vs. 82.64%) ridership, meaning when it predicts these levels, it is more likely to be correct. The precision for 'High' is comparable.
+
+Balanced Accuracy: Random Forest demonstrates higher balanced accuracy across all classes, especially for 'Medium' (92.77% vs. 88.30%) and 'High' (95.17% vs. 92.47%), indicating better performance when class imbalance is considered."
+```
+
+
+
+## Variable Importance (Random Forest)
+```{r}
+importance(rf_model)
+
+```
+```{r}
+rf_importance <- importance(rf_model)
+rf_importance_df <- data.frame(Feature = rownames(rf_importance), Importance = rf_importance[,1])
+rf_importance_df <- rf_importance_df[order(-rf_importance_df$Importance),]
+
+ggplot(rf_importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Random Forest Feature Importance", x = "Feature", y = "Importance") +
+  theme_minimal()
+
+```
+
+
+## Accuracy
+```{r}
+tree_accuracy <- sum(tree_pred == test_data_clean$ridership_class) / length(tree_pred)
+rf_accuracy <- sum(rf_pred == test_data_clean$ridership_class) / length(rf_pred)
+
+cat(sprintf("Decision Tree Accuracy: %.2f%%\n", tree_accuracy * 100))
+cat(sprintf("Random Forest Accuracy: %.2f%%\n", rf_accuracy * 100))
+
+```
+
+## Cross-Validation: K-Fold CV for Decision Trees
+```{r}
+set.seed(168)
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train CV Tree model
+tree_cv_model <- train(ridership_class ~ Buses__Total_Estimated_Ridership +
+                                    LIRR__Total_Estimated_Ridership +
+                                    Metro_North__Total_Estimated_Ridership +
+                                    Access_A_Ride__Total_Scheduled_Trips +
+                                    Bridges_and_Tunnels__Total_Traffic +
+                                    Staten_Island_Railway__Total_Estimated_Ridership,
+                       data = train_data_clean,
+                       method = "rpart",
+                       trControl = train_control)
+
+# CV Model Summary
+print(tree_cv_model)
+
+# Predict using CV model
+tree_pred_cv <- predict(tree_cv_model, test_data_clean)
+
+# Confusion Matrix
+cat("Decision Tree (CV) Confusion Matrix:\n")
+print(confusionMatrix(tree_pred_cv, test_data_clean$ridership_class))
+
+```
+```{r}
+"Accuracy: Random Forest (93.22%) still significantly outperforms the cross-validated Decision Tree (87.57%).
+
+Kappa: Random Forest (0.8983) shows substantially better agreement than the cross-validated Decision Tree (0.8136).
+
+Sensitivity: Random Forest generally maintains higher or comparable sensitivity across the classes, 'particularly for 'Medium' and 'High' ridership.
+
+Specificity: Random Forest consistently shows higher specificity, indicating a better ability to correctly identify days not belonging to each class.
+
+Balanced Accuracy: Random Forest exhibits higher balanced accuracy across all classes, suggesting more robust performance when considering potential class imbalance."
+```
+
+
+
+```{r}
+" Over all, The strong performance of the Random Forest model highlights just how many different factors influence subway ridership. Both models show that commuter rail services like the LIRR and Metro-North play a major role, even though each model weighs their importance a little differently. This points to a strong connection between regional commuting patterns and how people use the subway.
+
+Access-A-Ride also showed up as a key factor, suggesting that paratransit demand might be linked to specific levels of subway ridership, maybe reflecting the needs of certain groups of riders who rely more heavily on these services.
+
+On the other hand, bus ridership and bridge/tunnel traffic were less important in the Random Forest model, and they didn’t even appear in the decision tree structure. This suggests that while buses and car traffic might affect transit patterns in general, they’re not the strongest indicators when it comes to classifying daily subway ridership as 'low,' 'average,' or 'high.' That said, they could still be valuable for predicting the actual number of riders (as we saw in the regressiolln models) or for understanding more localized transit behaviors.
+
+The Random Forest's high accuracy rate (93.22%) gives us a lot of confidence in its ability to predict daily ridership categories moving forward. This could be incredibly useful for the MTA when it comes to planning ahead, such as adjusting train schedules, staffing, and resource allocation based on expected rider volumes. For example, if we can predict a 'high' ridership day ahead of time based on trends in commuter rail or paratransit usage, the MTA could proactively add service and better manage crowding.
+
+Finally, the insights from the feature importance analysis can help guide bigger policy decisions. Knowing which modes of transit have the strongest ties to subway ridership could support more integrated planning and investment strategies across the system. For instance, encouraging commuter rail use might have predictable ripple effects on subway demand."
+```
+
+```{r}
+#combined regression plot
+response_var <- "Subways: Total Estimated Ridership"
+predictor_vars <- c("Buses: Total Estimated Ridership", 
+                    "LIRR: Total Estimated Ridership", 
+                    "Metro-North: Total Estimated Ridership",
+                    "Access-A-Ride: Total Scheduled Trips", 
+                    "Bridges and Tunnels: Total Traffic", 
+                    "Staten Island Railway: Total Estimated Ridership")
+
+df_clean <- na.omit(df[, c(response_var, predictor_vars)])
+
+
+x <- as.matrix(df_clean[, predictor_vars])
+y <- df_clean[[response_var]]
+
+
+set.seed(1234)
+train_indices <- sample(1:nrow(x), 0.8 * nrow(x))
+x_train <- x[train_indices, ]
+y_train <- y[train_indices]
+x_test  <- x[-train_indices, ]
+y_test  <- y[-train_indices]
+
+
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+ridge_pred <- predict(ridge_model, s = ridge_model$lambda.min, newx = x_test)
+
+
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
+
+
+full_model <- lm(`Subways: Total Estimated Ridership` ~ ., data = df)
+predicted_full <- predict(full_model, df)
+
+
+mlr_plot_df <- data.frame(Actual = df$`Subways: Total Estimated Ridership`, 
+                          Predicted = predicted_full, 
+                          Model = "Linear Regression")
+
+ridge_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(ridge_pred), 
+                            Model = "Ridge Regression")
+
+lasso_plot_df <- data.frame(Actual = y_test, 
+                            Predicted = as.numeric(lasso_pred), 
+                            Model = "Lasso Regression")
+
+
+combined_df <- rbind(mlr_plot_df, ridge_plot_df, lasso_plot_df)
+
+
+ggplot(combined_df, aes(x = Actual, y = Predicted, color = Model)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "black", linetype = "dashed") +
+  labs(
+    title = "\n         Predicted vs Actual Subway Ridership",
+    x = "Actual Ridership (Billions)",
+    y = "Predicted Ridership (Billions)",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+```
