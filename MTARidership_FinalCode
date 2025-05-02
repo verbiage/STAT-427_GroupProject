@@ -429,7 +429,7 @@ predictor_vars <- c("Buses: Total Estimated Ridership",
 
 df_clean <- na.omit(df[, c(response_var, predictor_vars)])
 
-# Create matrices
+# Creating matrices
 x <- as.matrix(df_clean[, predictor_vars])
 y <- df_clean[[response_var]]
 
@@ -456,10 +456,10 @@ lasso_pred <- predict(lasso_model, s = lasso_model$lambda.min, newx = x_test)
 lasso_mse <- mean((lasso_pred - y_test)^2)
 
 ridge_r2 <- 1 - sum((y_test - ridge_pred)^2) / sum((y_test - mean(y_test))^2)
-ridge_rmse <- sqrt(mean((y_test - ridge_pred)^2)) # Calculate RMSE directly
+ridge_rmse <- sqrt(mean((y_test - ridge_pred)^2)) 
 
 lasso_r2 <- 1 - sum((y_test - lasso_pred)^2) / sum((y_test - mean(y_test))^2)
-lasso_rmse <- sqrt(mean((y_test - lasso_pred)^2)) # Calculate RMSE directly
+lasso_rmse <- sqrt(mean((y_test - lasso_pred)^2)) 
 
 
 model_summary <- data.frame(
@@ -474,7 +474,6 @@ print(model_summary)
 
 ## Ridge vs Lasso: Predicted vs Actual Plot
 ```{r}
-# Plotting
 ridge_plot_df <- data.frame(Actual = y_test, Predicted = as.numeric(ridge_pred), Model = "Ridge")
 lasso_plot_df <- data.frame(Actual = y_test, Predicted = as.numeric(lasso_pred), Model = "Lasso")
 all_predictions_df <- rbind(ridge_plot_df, lasso_plot_df)
@@ -502,7 +501,7 @@ ggplot(all_predictions_df, aes(x = Actual, y = Predicted, color = Model)) +
 
 ## Ridge/Lasso CV Plots
 ```{r}
-# Create data frames for ridge and lasso
+# Creating data frames for ridge and lasso
 ridge_df <- data.frame(
   log_lambda = log(ridge_model$lambda),
   mse_mean = ridge_model$cvm,
@@ -578,7 +577,7 @@ train_index <- createDataPartition(df_clean$ridership_class, p = 0.8, list = FAL
 train_data <- df_clean[train_index, ]
 test_data  <- df_clean[-train_index, ]
 
-# Clean column names (no colons/spaces)
+# Cleaning column names (no colons/spaces)
 train_data_clean <- train_data %>%
   rename_with(~ gsub("[^[:alnum:]_]", "_", .))
 
@@ -712,7 +711,7 @@ tree_cv_model <- train(ridership_class ~ Buses__Total_Estimated_Ridership +
 # CV Model Summary
 print(tree_cv_model)
 
-# Predict using CV model
+# Prediction using CV model
 tree_pred_cv <- predict(tree_cv_model, test_data_clean)
 
 # Confusion Matrix
