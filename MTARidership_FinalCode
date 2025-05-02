@@ -240,12 +240,13 @@ plot(reduced_model)
 ```
 
 ```{r}
-step(reduced_model)
+reduced_model_step <- step(reduced_model)
+reduced_model_step
 ```
 ### Best to not drop any variables - dropping them only increases AIC. 
 
 ```{r}
-anova(full_model, reduced_model)
+anova(full_model, reduced_model_step)
 ```
 ### Reduced model actually worsened statistically. So, keeping full model performs better. 
 
